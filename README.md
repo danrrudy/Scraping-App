@@ -4,9 +4,11 @@ This is a Python-based modular application to aid in scraping text from PDF docu
 ## File Structure:
 
 ### Directories - all generated at runtime if not already present
-/data - location for input PDFs
-/logs - output location for logfiles and audit reports
-/scrapers - location for user-defined scraping tools built on base_scraper.py
+**/data** - location for input PDFs
+
+**/logs** - output location for logfiles and audit reports
+
+**/scrapers** - location for user-defined scraping tools built on base_scraper.py
 
 ### Project Files
 *scraping_helper* - This is the main application shell, which handles UI setup and the main workflow
