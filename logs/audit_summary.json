@@ -1,0 +1,1050 @@
+{
+  "total_entries": 1740,
+  "status_counts": {
+    "PASS": 280,
+    "FAIL": 1460
+  },
+  "test_failures": {
+    "keyword_match": 332,
+    "fatal": 345,
+    "stratobj_match": 921,
+    "goal_match": 402,
+    "pages_parsed": 17,
+    "text_scraped": 26,
+    "obj_match": 409
+  },
+  "failures_by_agency": {
+    "USDA": {
+      "2002": [
+        "keyword_match"
+      ],
+      "2003": [
+        "keyword_match"
+      ],
+      "2004": [
+        "keyword_match"
+      ],
+      "2005": [
+        "keyword_match"
+      ],
+      "2006": [
+        "keyword_match"
+      ],
+      "2007": [
+        "keyword_match"
+      ],
+      "2008": [
+        "keyword_match"
+      ],
+      "2009": [
+        "keyword_match"
+      ],
+      "2010": [
+        "keyword_match"
+      ],
+      "2011": [
+        "keyword_match"
+      ]
+    },
+    "AID": {
+      "2002": [],
+      "2003": [],
+      "2004": [],
+      "2005": [],
+      "2006": [],
+      "2007": [],
+      "2008": [],
+      "2009": [],
+      "2010": [],
+      "2011": []
+    },
+    "COM": {
+      "2004": [
+        "keyword_match"
+      ]
+    },
+    "EDU": {
+      "2002": [
+        "goal_match",
+        "stratobj_match"
+      ],
+      "2003": [
+        "keyword_match",
+        "stratobj_match"
+      ],
+      "2004": [
+        "keyword_match"
+      ],
+      "2005": [
+        "keyword_match"
+      ],
+      "2006": [
+        "keyword_match"
+      ],
+      "2007": [
+        "keyword_match"
+      ],
+      "2008": [
+        "keyword_match"
+      ],
+      "2009": [
+        "keyword_match"
+      ],
+      "2010": [
+        "keyword_match"
+      ]
+    },
+    "DOD": {
+      "2002": [
+        "pages_parsed",
+        "text_scraped"
+      ],
+      "2003": [
+        "goal_match",
+        "keyword_match",
+        "obj_match"
+      ],
+      "2004": [
+        "keyword_match",
+        "obj_match",
+        "stratobj_match"
+      ],
+      "2005": [
+        "goal_match",
+        "keyword_match",
+        "obj_match",
+        "stratobj_match"
+      ],
+      "2006": [
+        "goal_match",
+        "obj_match",
+        "stratobj_match"
+      ],
+      "2007": [
+        "keyword_match"
+      ],
+      "2008": [
+        "keyword_match"
+      ],
+      "2009": [
+        "keyword_match"
+      ],
+      "2010": [
+        "keyword_match"
+      ]
+    },
+    "JUS": {
+      "2002": [
+        "goal_match",
+        "obj_match",
+        "stratobj_match"
+      ],
+      "2003": [
+        "goal_match",
+        "obj_match",
+        "stratobj_match"
+      ],
+      "2004": [
+        "goal_match",
+        "stratobj_match"
+      ],
+      "2005": [
+        "goal_match",
+        "stratobj_match"
+      ],
+      "2006": [
+        "goal_match",
+        "stratobj_match"
+      ]
+    },
+    "LAB": {
+      "2002": [
+        "keyword_match",
+        "text_scraped"
+      ],
+      "2003": [
+        "keyword_match"
+      ],
+      "2004": [
+        "keyword_match"
+      ],
+      "2005": [
+        "keyword_match"
+      ],
+      "2006": [
+        "keyword_match"
+      ],
+      "2007": [
+        "keyword_match"
+      ],
+      "2008": [
+        "obj_match"
+      ],
+      "2009": [
+        "obj_match"
+      ],
+      "2010": [
+        "keyword_match"
+      ],
+      "2011": [
+        "keyword_match"
+      ]
+    },
+    "Energy": {
+      "2002": [],
+      "2003": [],
+      "2004": [],
+      "2005": [],
+      "2006": [],
+      "2007": [],
+      "2008": [],
+      "2009": [],
+      "2010": [],
+      "2011": []
+    },
+    "EEOC": {
+      "2002": [],
+      "2003": [],
+      "2004": [],
+      "2005": [],
+      "2006": [],
+      "2007": [],
+      "2008": [],
+      "2009": [],
+      "2010": [],
+      "2011": []
+    },
+    "EPA": {
+      "2002": [
+        "keyword_match",
+        "obj_match"
+      ],
+      "2003": [
+        "keyword_match",
+        "obj_match"
+      ],
+      "2004": [
+        "keyword_match",
+        "obj_match"
+      ],
+      "2005": [
+        "keyword_match",
+        "obj_match"
+      ],
+      "2006": [
+        "keyword_match",
+        "obj_match"
+      ],
+      "2007": [
+        "keyword_match",
+        "stratobj_match"
+      ],
+      "2008": [
+        "keyword_match",
+        "stratobj_match"
+      ],
+      "2009": [
+        "keyword_match",
+        "stratobj_match"
+      ],
+      "2010": [
+        "goal_match",
+        "keyword_match",
+        "obj_match",
+        "text_scraped"
+      ],
+      "2011": [
+        "keyword_match"
+      ]
+    },
+    "FTC": {
+      "2002": [],
+      "2004": [
+        "keyword_match",
+        "obj_match"
+      ],
+      "2006": [
+        "obj_match"
+      ]
+    },
+    "GSA": {
+      "2002": [
+        "text_scraped"
+      ],
+      "2011": [
+        "stratobj_match"
+      ]
+    },
+    "HHS": {
+      "2004": [
+        "keyword_match"
+      ],
+      "2007": [
+        "goal_match",
+        "stratobj_match"
+      ],
+      "2010": []
+    },
+    "HUD": {
+      "2002": [
+        "stratobj_match"
+      ],
+      "2003": [
+        "stratobj_match"
+      ],
+      "2004": [
+        "stratobj_match"
+      ],
+      "2005": [
+        "stratobj_match"
+      ],
+      "2006": [
+        "stratobj_match"
+      ],
+      "2008": [
+        "stratobj_match"
+      ],
+      "2009": [
+        "stratobj_match"
+      ],
+      "2010": [
+        "keyword_match",
+        "stratobj_match"
+      ],
+      "2011": [
+        "keyword_match"
+      ]
+    },
+    "BBG": {
+      "2002": [],
+      "2003": []
+    },
+    "INT": {
+      "2002": [
+        "keyword_match"
+      ],
+      "2007": [
+        "keyword_match"
+      ],
+      "2008": [
+        "keyword_match"
+      ],
+      "2009": [
+        "obj_match",
+        "stratobj_match"
+      ],
+      "2010": [
+        "obj_match",
+        "pages_parsed",
+        "stratobj_match",
+        "text_scraped"
+      ]
+    },
+    "NASA": {
+      "2003": [
+        "keyword_match"
+      ]
+    },
+    "OPM": {
+      "2002": [
+        "keyword_match",
+        "stratobj_match"
+      ],
+      "2003": [
+        "keyword_match",
+        "stratobj_match"
+      ]
+    },
+    "SBA": {
+      "2002": [],
+      "2004": [
+        "pages_parsed",
+        "stratobj_match",
+        "text_scraped"
+      ]
+    },
+    "SEC": {
+      "2002": [],
+      "2003": []
+    },
+    "CPSC": {
+      "2002": [],
+      "2003": [],
+      "2004": [],
+      "2005": [],
+      "2006": [],
+      "2007": [],
+      "2008": [],
+      "2009": [],
+      "2010": [],
+      "2011": []
+    },
+    "DOS": {
+      "2002": [
+        "keyword_match"
+      ],
+      "2009": [],
+      "2010": [],
+      "2011": []
+    },
+    "SSA": {
+      "2002": [
+        "keyword_match"
+      ],
+      "2003": [
+        "goal_match",
+        "keyword_match",
+        "obj_match",
+        "stratobj_match"
+      ],
+      "2004": [
+        "keyword_match"
+      ],
+      "2005": [
+        "keyword_match"
+      ],
+      "2006": [
+        "keyword_match"
+      ],
+      "2008": [
+        "keyword_match",
+        "obj_match",
+        "stratobj_match"
+      ]
+    },
+    "TRN": {
+      "2002": [
+        "stratobj_match"
+      ],
+      "2004": [
+        "stratobj_match",
+        "text_scraped"
+      ]
+    },
+    "TRS": {
+      "2008": [
+        "obj_match",
+        "stratobj_match"
+      ]
+    },
+    "VA": {
+      "2002": [
+        "keyword_match"
+      ],
+      "2003": [
+        "keyword_match"
+      ],
+      "2004": [
+        "keyword_match"
+      ],
+      "2005": [
+        "keyword_match"
+      ],
+      "2006": [
+        "keyword_match"
+      ]
+    },
+    "FERC": {
+      "2002": [
+        "keyword_match",
+        "stratobj_match"
+      ],
+      "2003": [
+        "keyword_match"
+      ],
+      "2004": [
+        "keyword_match",
+        "stratobj_match"
+      ],
+      "2005": [
+        "stratobj_match"
+      ],
+      "2006": [
+        "stratobj_match"
+      ],
+      "2007": [
+        "stratobj_match"
+      ],
+      "2008": [
+        "stratobj_match"
+      ],
+      "2009": [
+        "stratobj_match"
+      ],
+      "2010": [
+        "keyword_match",
+        "stratobj_match"
+      ],
+      "2011": [
+        "keyword_match",
+        "stratobj_match"
+      ]
+    },
+    "FAA": {
+      "2002": [
+        "goal_match",
+        "keyword_match",
+        "stratobj_match"
+      ],
+      "2003": [
+        "keyword_match"
+      ],
+      "2004": [
+        "keyword_match"
+      ],
+      "2005": [
+        "keyword_match"
+      ],
+      "2006": [
+        "keyword_match"
+      ],
+      "2007": [
+        "keyword_match"
+      ],
+      "2009": [],
+      "2010": [
+        "keyword_match"
+      ],
+      "2011": [
+        "keyword_match"
+      ]
+    },
+    "CNS": {
+      "2002": [
+        "stratobj_match"
+      ],
+      "2003": [
+        "stratobj_match"
+      ],
+      "2004": [
+        "keyword_match",
+        "obj_match",
+        "stratobj_match"
+      ],
+      "2005": [
+        "stratobj_match"
+      ],
+      "2010": [
+        "keyword_match",
+        "stratobj_match"
+      ]
+    },
+    "DHS": {
+      "2002": [],
+      "2005": [
+        "stratobj_match"
+      ],
+      "2006": [
+        "stratobj_match"
+      ],
+      "2007": [],
+      "2008": [],
+      "2009": [],
+      "2010": [],
+      "2011": []
+    },
+    "NARA": {
+      "2002": [
+        "obj_match",
+        "pages_parsed",
+        "stratobj_match",
+        "text_scraped"
+      ],
+      "2003": [
+        "obj_match",
+        "pages_parsed",
+        "stratobj_match",
+        "text_scraped"
+      ],
+      "2010": [
+        "keyword_match",
+        "stratobj_match"
+      ],
+      "2011": [
+        "keyword_match",
+        "stratobj_match"
+      ]
+    },
+    "FCC": {
+      "2002": [
+        "goal_match",
+        "obj_match",
+        "stratobj_match"
+      ],
+      "2003": [
+        "pages_parsed",
+        "text_scraped"
+      ],
+      "2004": [
+        "obj_match",
+        "stratobj_match"
+      ],
+      "2005": [
+        "keyword_match"
+      ],
+      "2006": [
+        "keyword_match"
+      ],
+      "2007": [
+        "keyword_match"
+      ],
+      "2008": [
+        "keyword_match"
+      ],
+      "2009": [
+        "keyword_match"
+      ],
+      "2010": [
+        "keyword_match"
+      ],
+      "2011": [
+        "keyword_match"
+      ]
+    },
+    "FedReserve": {
+      "2002": [],
+      "2003": [],
+      "2004": [],
+      "2005": [],
+      "2006": [],
+      "2007": [],
+      "2008": [],
+      "2009": [],
+      "2010": [],
+      "2011": []
+    },
+    "FEC": {
+      "2002": [],
+      "2003": [],
+      "2004": [],
+      "2006": [
+        "keyword_match",
+        "pages_parsed",
+        "text_scraped"
+      ],
+      "2007": [
+        "keyword_match",
+        "pages_parsed",
+        "text_scraped"
+      ]
+    },
+    "NEA": {
+      "2002": [],
+      "2003": [],
+      "2004": [],
+      "2005": [],
+      "2006": [],
+      "2007": [],
+      "2008": [],
+      "2009": [],
+      "2010": [],
+      "2011": []
+    },
+    "NEH": {
+      "2002": [],
+      "2003": [],
+      "2004": [],
+      "2005": [],
+      "2006": [],
+      "2007": [],
+      "2008": [],
+      "2009": [],
+      "2010": [],
+      "2011": []
+    },
+    "NLRB": {
+      "2002": [],
+      "2003": [],
+      "2004": [
+        "keyword_match"
+      ],
+      "2005": [
+        "keyword_match"
+      ],
+      "2006": [
+        "keyword_match"
+      ],
+      "2007": [
+        "keyword_match"
+      ],
+      "2008": [
+        "keyword_match"
+      ],
+      "2009": [
+        "keyword_match"
+      ],
+      "2010": [
+        "keyword_match"
+      ],
+      "2011": [
+        "keyword_match"
+      ]
+    },
+    "NRC": {
+      "2002": [
+        "goal_match",
+        "obj_match",
+        "stratobj_match"
+      ],
+      "2003": [
+        "goal_match",
+        "obj_match",
+        "stratobj_match"
+      ],
+      "2004": [
+        "goal_match",
+        "obj_match",
+        "stratobj_match"
+      ],
+      "2005": [
+        "obj_match",
+        "stratobj_match"
+      ],
+      "2006": [
+        "goal_match"
+      ]
+    },
+    "OGE": {
+      "2002": [],
+      "2003": [],
+      "2004": [
+        "pages_parsed",
+        "text_scraped"
+      ],
+      "2005": [
+        "pages_parsed",
+        "text_scraped"
+      ],
+      "2006": [
+        "pages_parsed",
+        "text_scraped"
+      ],
+      "2007": [
+        "stratobj_match"
+      ],
+      "2008": [
+        "stratobj_match"
+      ],
+      "2009": [
+        "stratobj_match"
+      ],
+      "2010": [
+        "keyword_match",
+        "obj_match",
+        "pages_parsed",
+        "stratobj_match",
+        "text_scraped"
+      ],
+      "2011": [
+        "keyword_match",
+        "obj_match",
+        "pages_parsed",
+        "stratobj_match",
+        "text_scraped"
+      ]
+    },
+    "OSC": {
+      "2002": [],
+      "2003": [],
+      "2004": [
+        "keyword_match"
+      ],
+      "2005": [
+        "keyword_match"
+      ],
+      "2007": [
+        "stratobj_match"
+      ],
+      "2008": [
+        "stratobj_match"
+      ],
+      "2009": [
+        "stratobj_match"
+      ],
+      "2010": [
+        "stratobj_match"
+      ],
+      "2011": [
+        "goal_match",
+        "stratobj_match"
+      ]
+    },
+    "PC": {
+      "2002": [],
+      "2003": [],
+      "2004": [
+        "stratobj_match"
+      ],
+      "2005": [
+        "stratobj_match"
+      ],
+      "2006": [
+        "stratobj_match"
+      ],
+      "2010": [
+        "goal_match",
+        "stratobj_match"
+      ],
+      "2011": [
+        "stratobj_match"
+      ]
+    },
+    "SSS": {
+      "2002": [],
+      "2003": [],
+      "2004": [],
+      "2005": [
+        "goal_match",
+        "obj_match",
+        "stratobj_match"
+      ],
+      "2006": [
+        "stratobj_match"
+      ],
+      "2007": [
+        "stratobj_match"
+      ],
+      "2008": [
+        "text_scraped"
+      ]
+    },
+    "USTDA": {
+      "2002": [],
+      "2003": [],
+      "2011": [
+        "keyword_match",
+        "pages_parsed",
+        "text_scraped"
+      ]
+    }
+  },
+  "outcomes_by_format_type": {
+    "1": {
+      "PASS": 41,
+      "FAIL": 23,
+      "failed_tests": {
+        "keyword_match": 12
+      }
+    },
+    "7": {
+      "PASS": 14,
+      "FAIL": 147,
+      "failed_tests": {
+        "keyword_match": 23,
+        "stratobj_match": 53,
+        "obj_match": 14,
+        "goal_match": 16
+      }
+    },
+    "3": {
+      "PASS": 44,
+      "FAIL": 13,
+      "failed_tests": {
+        "keyword_match": 13
+      }
+    },
+    "2": {
+      "PASS": 8,
+      "FAIL": 4,
+      "failed_tests": {
+        "keyword_match": 2,
+        "text_scraped": 1
+      }
+    },
+    "17": {
+      "PASS": 4,
+      "FAIL": 238,
+      "failed_tests": {
+        "stratobj_match": 212,
+        "goal_match": 98,
+        "keyword_match": 99,
+        "obj_match": 71
+      }
+    },
+    "UNKNOWN": {
+      "PASS": 0,
+      "FAIL": 43,
+      "failed_tests": {
+        "pages_parsed": 6,
+        "text_scraped": 6,
+        "keyword_match": 11
+      }
+    },
+    "6": {
+      "PASS": 20,
+      "FAIL": 75,
+      "failed_tests": {
+        "stratobj_match": 58,
+        "obj_match": 34,
+        "keyword_match": 16,
+        "goal_match": 13,
+        "text_scraped": 1
+      }
+    },
+    "5": {
+      "PASS": 44,
+      "FAIL": 18,
+      "failed_tests": {
+        "keyword_match": 14,
+        "stratobj_match": 2,
+        "text_scraped": 1
+      }
+    },
+    "18": {
+      "PASS": 3,
+      "FAIL": 275,
+      "failed_tests": {
+        "goal_match": 191,
+        "stratobj_match": 273,
+        "obj_match": 132,
+        "keyword_match": 60
+      }
+    },
+    "16": {
+      "PASS": 21,
+      "FAIL": 84,
+      "failed_tests": {
+        "text_scraped": 1,
+        "keyword_match": 14,
+        "obj_match": 1,
+        "stratobj_match": 38
+      }
+    },
+    "21": {
+      "PASS": 0,
+      "FAIL": 17,
+      "failed_tests": {
+        "keyword_match": 9,
+        "stratobj_match": 1
+      }
+    },
+    "11": {
+      "PASS": 8,
+      "FAIL": 31,
+      "failed_tests": {
+        "obj_match": 27,
+        "keyword_match": 7,
+        "stratobj_match": 14
+      }
+    },
+    "9": {
+      "PASS": 0,
+      "FAIL": 14,
+      "failed_tests": {
+        "obj_match": 12,
+        "goal_match": 12,
+        "stratobj_match": 2
+      }
+    },
+    "14": {
+      "PASS": 6,
+      "FAIL": 38,
+      "failed_tests": {
+        "keyword_match": 10,
+        "stratobj_match": 15
+      }
+    },
+    "8": {
+      "PASS": 0,
+      "FAIL": 15,
+      "failed_tests": {
+        "keyword_match": 15,
+        "stratobj_match": 7
+      }
+    },
+    "19": {
+      "PASS": 6,
+      "FAIL": 18,
+      "failed_tests": {
+        "keyword_match": 2,
+        "obj_match": 14,
+        "stratobj_match": 3,
+        "goal_match": 3,
+        "pages_parsed": 1,
+        "text_scraped": 1
+      }
+    },
+    "10": {
+      "PASS": 8,
+      "FAIL": 135,
+      "failed_tests": {
+        "stratobj_match": 70,
+        "pages_parsed": 6,
+        "text_scraped": 6,
+        "obj_match": 26
+      }
+    },
+    "22": {
+      "PASS": 0,
+      "FAIL": 75,
+      "failed_tests": {
+        "stratobj_match": 75,
+        "goal_match": 69,
+        "obj_match": 32
+      }
+    },
+    "15": {
+      "PASS": 25,
+      "FAIL": 28,
+      "failed_tests": {
+        "stratobj_match": 28,
+        "text_scraped": 5,
+        "obj_match": 1
+      }
+    },
+    "12": {
+      "PASS": 0,
+      "FAIL": 35,
+      "failed_tests": {
+        "stratobj_match": 35,
+        "obj_match": 35,
+        "pages_parsed": 1,
+        "text_scraped": 1
+      }
+    },
+    "4": {
+      "PASS": 9,
+      "FAIL": 11,
+      "failed_tests": {
+        "keyword_match": 10
+      }
+    },
+    "20": {
+      "PASS": 10,
+      "FAIL": 15,
+      "failed_tests": {
+        "keyword_match": 2,
+        "stratobj_match": 15
+      }
+    },
+    "13": {
+      "PASS": 9,
+      "FAIL": 6,
+      "failed_tests": {}
+    },
+    "24": {
+      "PASS": 0,
+      "FAIL": 1,
+      "failed_tests": {
+        "pages_parsed": 1,
+        "text_scraped": 1
+      }
+    },
+    "23": {
+      "PASS": 0,
+      "FAIL": 81,
+      "failed_tests": {}
+    },
+    "25": {
+      "PASS": 0,
+      "FAIL": 20,
+      "failed_tests": {
+        "stratobj_match": 20,
+        "keyword_match": 13,
+        "obj_match": 10,
+        "pages_parsed": 2,
+        "text_scraped": 2
+      }
+    }
+  }
+}

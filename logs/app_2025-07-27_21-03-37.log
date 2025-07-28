@@ -1,0 +1,29 @@
+2025-07-27 21:03:37,155 - INFO - Initialized Logger
+2025-07-27 21:03:38,853 - INFO - Successfully loaded MID
+2025-07-27 21:03:38,855 - DEBUG - Initializing UI
+2025-07-27 21:03:38,860 - DEBUG - Added Load Document button
+2025-07-27 21:03:38,861 - DEBUG - Added Previous Page button
+2025-07-27 21:03:38,862 - DEBUG - Added Next Page button
+2025-07-27 21:03:38,863 - DEBUG - Added Scrape Page button
+2025-07-27 21:03:38,863 - DEBUG - Added Accept Scrape button
+2025-07-27 21:03:38,864 - DEBUG - Added Reject Scrape button
+2025-07-27 21:03:38,865 - DEBUG - Added Next MID Entry button
+2025-07-27 21:03:38,867 - DEBUG - Added Previous MID Entry button
+2025-07-27 21:03:38,868 - DEBUG - Added Settings button
+2025-07-27 21:03:38,868 - DEBUG - Added Audit button
+2025-07-27 21:03:39,916 - DEBUG - parsing p.13-14
+2025-07-27 21:03:39,917 - DEBUG - Page range: 13 - 14
+2025-07-27 21:03:39,918 - INFO - Loaded USDA_2002.pdf for USDA (2002), pages: [13, 14]
+2025-07-27 21:03:39,919 - DEBUG - Attempting to display a new document page
+2025-07-27 21:03:39,968 - DEBUG - Attempting to scrape page
+2025-07-27 21:03:39,973 - DEBUG - Scraper identified, returning its Class
+2025-07-27 21:03:39,990 - INFO - Scraped page 13
+2025-07-27 21:03:39,994 - DEBUG - First MID row loaded successfully
+2025-07-27 21:03:40,148 - DEBUG - Window resized
+2025-07-27 21:03:40,149 - DEBUG - Attempting to display a new document page
+2025-07-27 21:03:40,168 - DEBUG - Attempting to scrape page
+2025-07-27 21:03:40,176 - DEBUG - Scraper identified, returning its Class
+2025-07-27 21:03:40,190 - INFO - Scraped page 13
+2025-07-27 21:03:42,170 - DEBUG - Attempting to open Settings
+2025-07-27 21:03:48,243 - INFO - User updated settings in-app
+2025-07-27 21:03:50,445 - INFO - Starting MID Audit
