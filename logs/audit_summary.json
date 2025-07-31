@@ -1,17 +1,18 @@
 {
-  "total_entries": 1740,
+  "total_entries": 1630,
   "status_counts": {
-    "PASS": 280,
-    "FAIL": 1460
+    "PASS": 295,
+    "FAIL": 1335
   },
   "test_failures": {
-    "keyword_match": 332,
-    "fatal": 345,
-    "stratobj_match": 921,
-    "goal_match": 402,
-    "pages_parsed": 17,
-    "text_scraped": 26,
-    "obj_match": 409
+    "keyword_match": 364,
+    "table_detected": 411,
+    "stratobj_match": 970,
+    "goal_match": 427,
+    "obj_match": 417,
+    "text_scraped": 19,
+    "fatal": 161,
+    "pages_parsed": 10
   },
   "failures_by_agency": {
     "USDA": {
@@ -47,16 +48,25 @@
       ]
     },
     "AID": {
-      "2002": [],
-      "2003": [],
-      "2004": [],
-      "2005": [],
-      "2006": [],
-      "2007": [],
-      "2008": [],
-      "2009": [],
-      "2010": [],
-      "2011": []
+      "2002": [
+        "keyword_match",
+        "table_detected"
+      ],
+      "2007": [
+        "keyword_match"
+      ],
+      "2008": [
+        "keyword_match"
+      ],
+      "2010": [
+        "goal_match",
+        "keyword_match",
+        "stratobj_match",
+        "table_detected"
+      ],
+      "2011": [
+        "keyword_match"
+      ]
     },
     "COM": {
       "2004": [
@@ -66,17 +76,20 @@
     "EDU": {
       "2002": [
         "goal_match",
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ],
       "2003": [
         "keyword_match",
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ],
       "2004": [
         "keyword_match"
       ],
       "2005": [
-        "keyword_match"
+        "keyword_match",
+        "table_detected"
       ],
       "2006": [
         "keyword_match"
@@ -95,14 +108,11 @@
       ]
     },
     "DOD": {
-      "2002": [
-        "pages_parsed",
-        "text_scraped"
-      ],
       "2003": [
         "goal_match",
         "keyword_match",
-        "obj_match"
+        "obj_match",
+        "table_detected"
       ],
       "2004": [
         "keyword_match",
@@ -137,29 +147,35 @@
       "2002": [
         "goal_match",
         "obj_match",
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ],
       "2003": [
         "goal_match",
         "obj_match",
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ],
       "2004": [
         "goal_match",
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ],
       "2005": [
         "goal_match",
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ],
       "2006": [
         "goal_match",
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ]
     },
     "LAB": {
       "2002": [
         "keyword_match",
+        "table_detected",
         "text_scraped"
       ],
       "2003": [
@@ -191,16 +207,52 @@
       ]
     },
     "Energy": {
-      "2002": [],
-      "2003": [],
-      "2004": [],
-      "2005": [],
-      "2006": [],
-      "2007": [],
-      "2008": [],
-      "2009": [],
-      "2010": [],
-      "2011": []
+      "2002": [
+        "keyword_match"
+      ],
+      "2003": [
+        "keyword_match"
+      ],
+      "2004": [
+        "keyword_match",
+        "obj_match",
+        "stratobj_match"
+      ],
+      "2005": [
+        "keyword_match",
+        "obj_match",
+        "stratobj_match"
+      ],
+      "2006": [
+        "keyword_match",
+        "obj_match",
+        "stratobj_match"
+      ],
+      "2007": [
+        "keyword_match",
+        "obj_match",
+        "stratobj_match"
+      ],
+      "2008": [
+        "keyword_match",
+        "obj_match",
+        "stratobj_match"
+      ],
+      "2009": [
+        "keyword_match",
+        "obj_match",
+        "stratobj_match"
+      ],
+      "2010": [
+        "keyword_match",
+        "obj_match",
+        "stratobj_match"
+      ],
+      "2011": [
+        "keyword_match",
+        "obj_match",
+        "stratobj_match"
+      ]
     },
     "EEOC": {
       "2002": [],
@@ -258,10 +310,12 @@
       ]
     },
     "FTC": {
-      "2002": [],
       "2004": [
         "keyword_match",
         "obj_match"
+      ],
+      "2005": [
+        "table_detected"
       ],
       "2006": [
         "obj_match"
@@ -269,6 +323,7 @@
     },
     "GSA": {
       "2002": [
+        "table_detected",
         "text_scraped"
       ],
       "2011": [
@@ -282,6 +337,9 @@
       "2007": [
         "goal_match",
         "stratobj_match"
+      ],
+      "2009": [
+        "table_detected"
       ],
       "2010": []
     },
@@ -299,7 +357,11 @@
         "stratobj_match"
       ],
       "2006": [
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
+      ],
+      "2007": [
+        "table_detected"
       ],
       "2008": [
         "stratobj_match"
@@ -316,27 +378,40 @@
       ]
     },
     "BBG": {
-      "2002": [],
-      "2003": []
+      "2007": [
+        "table_detected"
+      ],
+      "2008": [
+        "table_detected"
+      ]
     },
     "INT": {
       "2002": [
         "keyword_match"
       ],
+      "2004": [
+        "table_detected"
+      ],
+      "2005": [
+        "table_detected"
+      ],
       "2007": [
-        "keyword_match"
+        "keyword_match",
+        "table_detected"
       ],
       "2008": [
         "keyword_match"
       ],
       "2009": [
         "obj_match",
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ],
       "2010": [
         "obj_match",
         "pages_parsed",
         "stratobj_match",
+        "table_detected",
         "text_scraped"
       ]
     },
@@ -360,12 +435,12 @@
       "2004": [
         "pages_parsed",
         "stratobj_match",
+        "table_detected",
         "text_scraped"
+      ],
+      "2009": [
+        "table_detected"
       ]
-    },
-    "SEC": {
-      "2002": [],
-      "2003": []
     },
     "CPSC": {
       "2002": [],
@@ -383,9 +458,9 @@
       "2002": [
         "keyword_match"
       ],
-      "2009": [],
-      "2010": [],
-      "2011": []
+      "2010": [
+        "keyword_match"
+      ]
     },
     "SSA": {
       "2002": [
@@ -395,7 +470,8 @@
         "goal_match",
         "keyword_match",
         "obj_match",
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ],
       "2004": [
         "keyword_match"
@@ -409,7 +485,8 @@
       "2008": [
         "keyword_match",
         "obj_match",
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ]
     },
     "TRN": {
@@ -429,7 +506,8 @@
     },
     "VA": {
       "2002": [
-        "keyword_match"
+        "keyword_match",
+        "table_detected"
       ],
       "2003": [
         "keyword_match"
@@ -484,7 +562,8 @@
       "2002": [
         "goal_match",
         "keyword_match",
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ],
       "2003": [
         "keyword_match"
@@ -519,10 +598,14 @@
       "2004": [
         "keyword_match",
         "obj_match",
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ],
       "2005": [
         "stratobj_match"
+      ],
+      "2006": [
+        "table_detected"
       ],
       "2010": [
         "keyword_match",
@@ -530,7 +613,6 @@
       ]
     },
     "DHS": {
-      "2002": [],
       "2005": [
         "stratobj_match"
       ],
@@ -548,13 +630,18 @@
         "obj_match",
         "pages_parsed",
         "stratobj_match",
+        "table_detected",
         "text_scraped"
       ],
       "2003": [
         "obj_match",
         "pages_parsed",
         "stratobj_match",
+        "table_detected",
         "text_scraped"
+      ],
+      "2005": [
+        "table_detected"
       ],
       "2010": [
         "keyword_match",
@@ -578,83 +665,55 @@
       "2004": [
         "obj_match",
         "stratobj_match"
-      ],
-      "2005": [
-        "keyword_match"
-      ],
-      "2006": [
-        "keyword_match"
-      ],
-      "2007": [
-        "keyword_match"
-      ],
-      "2008": [
-        "keyword_match"
-      ],
-      "2009": [
-        "keyword_match"
-      ],
-      "2010": [
-        "keyword_match"
-      ],
-      "2011": [
-        "keyword_match"
       ]
     },
     "FedReserve": {
-      "2002": [],
-      "2003": [],
-      "2004": [],
-      "2005": [],
-      "2006": [],
-      "2007": [],
-      "2008": [],
-      "2009": [],
-      "2010": [],
-      "2011": []
-    },
-    "FEC": {
-      "2002": [],
-      "2003": [],
-      "2004": [],
-      "2006": [
+      "2002": [
         "keyword_match",
-        "pages_parsed",
-        "text_scraped"
+        "stratobj_match"
+      ],
+      "2003": [
+        "keyword_match",
+        "stratobj_match"
+      ],
+      "2004": [
+        "stratobj_match"
+      ],
+      "2005": [
+        "stratobj_match"
+      ],
+      "2006": [
+        "stratobj_match"
       ],
       "2007": [
-        "keyword_match",
-        "pages_parsed",
-        "text_scraped"
+        "stratobj_match"
+      ],
+      "2008": [
+        "stratobj_match"
+      ],
+      "2009": [
+        "stratobj_match"
+      ],
+      "2011": [
+        "stratobj_match",
+        "table_detected"
       ]
     },
-    "NEA": {
-      "2002": [],
-      "2003": [],
-      "2004": [],
-      "2005": [],
-      "2006": [],
-      "2007": [],
-      "2008": [],
-      "2009": [],
-      "2010": [],
-      "2011": []
-    },
-    "NEH": {
-      "2002": [],
-      "2003": [],
-      "2004": [],
-      "2005": [],
-      "2006": [],
-      "2007": [],
-      "2008": [],
-      "2009": [],
-      "2010": [],
-      "2011": []
+    "FEC": {
+      "2002": [
+        "keyword_match",
+        "table_detected"
+      ],
+      "2003": [
+        "keyword_match",
+        "table_detected"
+      ],
+      "2004": [
+        "keyword_match",
+        "table_detected"
+      ]
     },
     "NLRB": {
-      "2002": [],
-      "2003": [],
       "2004": [
         "keyword_match"
       ],
@@ -684,7 +743,8 @@
       "2002": [
         "goal_match",
         "obj_match",
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ],
       "2003": [
         "goal_match",
@@ -705,20 +765,6 @@
       ]
     },
     "OGE": {
-      "2002": [],
-      "2003": [],
-      "2004": [
-        "pages_parsed",
-        "text_scraped"
-      ],
-      "2005": [
-        "pages_parsed",
-        "text_scraped"
-      ],
-      "2006": [
-        "pages_parsed",
-        "text_scraped"
-      ],
       "2007": [
         "stratobj_match"
       ],
@@ -744,14 +790,6 @@
       ]
     },
     "OSC": {
-      "2002": [],
-      "2003": [],
-      "2004": [
-        "keyword_match"
-      ],
-      "2005": [
-        "keyword_match"
-      ],
       "2007": [
         "stratobj_match"
       ],
@@ -770,8 +808,6 @@
       ]
     },
     "PC": {
-      "2002": [],
-      "2003": [],
       "2004": [
         "stratobj_match"
       ],
@@ -781,18 +817,19 @@
       "2006": [
         "stratobj_match"
       ],
+      "2008": [
+        "table_detected"
+      ],
       "2010": [
         "goal_match",
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ],
       "2011": [
         "stratobj_match"
       ]
     },
     "SSS": {
-      "2002": [],
-      "2003": [],
-      "2004": [],
       "2005": [
         "goal_match",
         "obj_match",
@@ -807,48 +844,43 @@
       "2008": [
         "text_scraped"
       ]
-    },
-    "USTDA": {
-      "2002": [],
-      "2003": [],
-      "2011": [
-        "keyword_match",
-        "pages_parsed",
-        "text_scraped"
-      ]
     }
   },
   "outcomes_by_format_type": {
     "1": {
-      "PASS": 41,
-      "FAIL": 23,
+      "PASS": 47,
+      "FAIL": 17,
       "failed_tests": {
-        "keyword_match": 12
+        "keyword_match": 16,
+        "table_detected": 2
       }
     },
     "7": {
-      "PASS": 14,
-      "FAIL": 147,
+      "PASS": 19,
+      "FAIL": 142,
       "failed_tests": {
-        "keyword_match": 23,
-        "stratobj_match": 53,
-        "obj_match": 14,
-        "goal_match": 16
+        "keyword_match": 45,
+        "stratobj_match": 79,
+        "goal_match": 41,
+        "table_detected": 6,
+        "obj_match": 14
       }
     },
     "3": {
-      "PASS": 44,
-      "FAIL": 13,
+      "PASS": 42,
+      "FAIL": 15,
       "failed_tests": {
-        "keyword_match": 13
+        "keyword_match": 13,
+        "table_detected": 5
       }
     },
     "2": {
-      "PASS": 8,
-      "FAIL": 4,
+      "PASS": 7,
+      "FAIL": 5,
       "failed_tests": {
         "keyword_match": 2,
-        "text_scraped": 1
+        "text_scraped": 1,
+        "table_detected": 2
       }
     },
     "17": {
@@ -856,18 +888,10 @@
       "FAIL": 238,
       "failed_tests": {
         "stratobj_match": 212,
+        "table_detected": 137,
         "goal_match": 98,
-        "keyword_match": 99,
+        "keyword_match": 100,
         "obj_match": 71
-      }
-    },
-    "UNKNOWN": {
-      "PASS": 0,
-      "FAIL": 43,
-      "failed_tests": {
-        "pages_parsed": 6,
-        "text_scraped": 6,
-        "keyword_match": 11
       }
     },
     "6": {
@@ -882,10 +906,11 @@
       }
     },
     "5": {
-      "PASS": 44,
-      "FAIL": 18,
+      "PASS": 38,
+      "FAIL": 21,
       "failed_tests": {
         "keyword_match": 14,
+        "table_detected": 6,
         "stratobj_match": 2,
         "text_scraped": 1
       }
@@ -895,27 +920,30 @@
       "FAIL": 275,
       "failed_tests": {
         "goal_match": 191,
+        "table_detected": 211,
         "stratobj_match": 273,
         "obj_match": 132,
         "keyword_match": 60
       }
     },
     "16": {
-      "PASS": 21,
-      "FAIL": 84,
+      "PASS": 28,
+      "FAIL": 77,
       "failed_tests": {
         "text_scraped": 1,
         "keyword_match": 14,
+        "table_detected": 3,
         "obj_match": 1,
-        "stratobj_match": 38
+        "stratobj_match": 43
       }
     },
     "21": {
       "PASS": 0,
       "FAIL": 17,
       "failed_tests": {
-        "keyword_match": 9,
-        "stratobj_match": 1
+        "keyword_match": 17,
+        "stratobj_match": 9,
+        "obj_match": 8
       }
     },
     "11": {
@@ -933,7 +961,8 @@
       "failed_tests": {
         "obj_match": 12,
         "goal_match": 12,
-        "stratobj_match": 2
+        "stratobj_match": 2,
+        "table_detected": 2
       }
     },
     "14": {
@@ -954,14 +983,12 @@
     },
     "19": {
       "PASS": 6,
-      "FAIL": 18,
+      "FAIL": 17,
       "failed_tests": {
-        "keyword_match": 2,
+        "keyword_match": 1,
         "obj_match": 14,
         "stratobj_match": 3,
-        "goal_match": 3,
-        "pages_parsed": 1,
-        "text_scraped": 1
+        "goal_match": 3
       }
     },
     "10": {
@@ -971,6 +998,7 @@
         "stratobj_match": 70,
         "pages_parsed": 6,
         "text_scraped": 6,
+        "table_detected": 6,
         "obj_match": 26
       }
     },
@@ -984,10 +1012,11 @@
       }
     },
     "15": {
-      "PASS": 25,
-      "FAIL": 28,
+      "PASS": 23,
+      "FAIL": 30,
       "failed_tests": {
         "stratobj_match": 28,
+        "table_detected": 2,
         "text_scraped": 5,
         "obj_match": 1
       }
@@ -998,6 +1027,7 @@
       "failed_tests": {
         "stratobj_match": 35,
         "obj_match": 35,
+        "table_detected": 23,
         "pages_parsed": 1,
         "text_scraped": 1
       }
@@ -1020,7 +1050,10 @@
     "13": {
       "PASS": 9,
       "FAIL": 6,
-      "failed_tests": {}
+      "failed_tests": {
+        "keyword_match": 3,
+        "table_detected": 6
+      }
     },
     "24": {
       "PASS": 0,
@@ -1031,9 +1064,12 @@
       }
     },
     "23": {
-      "PASS": 0,
-      "FAIL": 81,
-      "failed_tests": {}
+      "PASS": 8,
+      "FAIL": 10,
+      "failed_tests": {
+        "keyword_match": 6,
+        "stratobj_match": 10
+      }
     },
     "25": {
       "PASS": 0,

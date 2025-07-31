@@ -1,6 +1,7 @@
 import sys
 import os
 import fitz  # PyMuPDF
+import json
 from PyQt5.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -14,7 +15,8 @@ from PyQt5.QtWidgets import (
     QFileDialog,
     QMessageBox,
     QDialog,
-    QInputDialog
+    QInputDialog,
+    QComboBox
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QImage
@@ -25,7 +27,8 @@ from settings_window import SettingsDialog
 from app_settings import load_settings, save_settings
 from mid_manager import MIDManager
 from logger import setup_logger
-from scraper_loader import load_scraper_class
+# from scraper_loader import load_scraper_class
+from scraper_loader import select_scraper_class
 from audit_runner import run_mid_audit
 
 
@@ -66,6 +69,12 @@ class TextScrapingReviewApp(QMainWindow):
         self.current_agency_yr = None
         self.scraped_text = ""
         self.info_labels = {}
+        self.manual_review = {
+            "active_test": None,
+            "results": {},  # format: {row_index: {"status": "ACCEPT" or "REJECT", "label": ..., "pages": [...]}}
+        }
+
+
         self.init_files()
 
         self.init_ui()
@@ -94,7 +103,7 @@ class TextScrapingReviewApp(QMainWindow):
         info_layout.addWidget(self.entry_index_label)
 
 
-        self.info_fields = ["File", "Agency", "Year", "Page"]
+        self.info_fields = ["File", "Agency", "Year", "Page", "Format"]
 
         # Dynamically create info fields to enhance modularity
         for field in self.info_fields:
@@ -157,6 +166,24 @@ class TextScrapingReviewApp(QMainWindow):
         control_layout.addWidget(audit_btn)
         self.logger.debug("Added Audit button")
 
+        self.failure_test_combo = QComboBox()
+        self.failure_test_combo.addItems([
+            "table_detected", "text_scraped", "goal_match", "obj_match",
+            "keyword_match", "stratobj_match", "pages_parsed", "pdf_found"
+        ])
+        control_layout.addWidget(QLabel("Load Failures For Test:"))
+        control_layout.addWidget(self.failure_test_combo)
+
+        load_failures_btn = QPushButton("Load Failures")
+        load_failures_btn.clicked.connect(self.handle_load_failures)
+        control_layout.addWidget(load_failures_btn)
+
+        export_review_btn = QPushButton("Export Review Results")
+        export_review_btn.clicked.connect(self.export_review_results)
+        control_layout.addWidget(export_review_btn)
+
+
+
         control_layout.addStretch()
         side_panel = QVBoxLayout()
         side_panel.addLayout(info_layout)
@@ -211,12 +238,15 @@ class TextScrapingReviewApp(QMainWindow):
                 self.entry_index_label.setText(
                     f"Entry {current_mid_index + 1:,} of {mid_length:,}"
                 )
+            current_format_type = row.get("Format_Type", "")
 
         for key, label in self.info_labels.items():
             if key == "page":
                 value = page_num
             elif key == "file":
                 value = self.current_agency_yr
+            elif key == "format":
+                value = current_format_type
             elif key in row:
                 value = row[key]
             else:
@@ -340,24 +370,33 @@ class TextScrapingReviewApp(QMainWindow):
             self.logger.warning("Document or MID is missing!")
             QMessageBox.warning(self, "Error", "Document or MID is missing!")
             return
+        
+        row = self.mid_manager.get_current_row()
+        format_type = int(row.get("Format_Type", -1))
+        # actual_page_number adds the page index to the start page
+        if self.page_indices:
+            actual_page_number = self.page_indices[self.current_page_index]
+        else:
+            actual_page_number = self.current_page_index
 
         try:
             # For now, hardcode this to pull the basic text scraper
             # TODO: grab the user's scraper-doctype mappings for scraper selection
-            scraper_path = os.path.join(os.path.dirname(__file__), "scrapers", "text_scraper.py")
-            ScraperClass = load_scraper_class(scraper_path)
+            ScraperClass = select_scraper_class(self.settings, format_type)
 
-            if self.page_indices:
-                actual_page_number = self.page_indices[self.current_page_index]
-            else:
-                actual_page_number = self.current_page_index
+
+            # Extract the current page to scrape
+
             page = self.doc.load_page(actual_page_number)
-            scraper = ScraperClass(page)
+            
+            # Create a scraper instance for the page
+            scraper = ScraperClass([page])
             result = scraper.scrape()
 
             self.scraped_text = result.get("text", "")
             self.text_edit.setPlainText(self.scraped_text)
 
+            # Add 1, as actual_page_number is 0-indexed
             self.logger.debug(f"Scraped page {actual_page_number+1}")
 
         except Exception as e:
@@ -366,24 +405,36 @@ class TextScrapingReviewApp(QMainWindow):
 
 
     def accept_scrape(self):
-        """
-        Handle acceptance of the scraped text for this page.
-        Implement logic to move to second-stage review or save results.
-        """
-        self.logger.info("Scrape Accepted!")
-        QMessageBox.information(
-            self, "Accept", f"Scrape accepted for page {self.current_page_index + 1}."
-        )
+        if self.manual_review["active_test"]:
+            idx = self.mid_manager.current_index
+            row = self.mid_manager.get_current_row()
+            pages = [self.page_indices[self.current_page_index]] if self.page_indices else []
+            self.manual_review["results"][idx] = {
+                "status": "ACCEPT",
+                "label": row.get("agency_yr", f"Index {idx}"),
+                "pages": pages
+            }
+            self.logger.info(f"Manually accepted row {idx}")
+            self.next_mid_entry()
+        else:
+            QMessageBox.information(self, "Accept", "Scrape accepted (not in review mode).")
+
 
     def reject_scrape(self):
-        """
-        Handle rejection of the scraped text for this page.
-        Implement logic to flag for further review.
-        """
-        self.logger.info("Scrape REJECTED")
-        QMessageBox.warning(
-            self, "Reject", f"Scrape rejected for page {self.current_page_index + 1}."
-        )
+        if self.manual_review["active_test"]:
+            idx = self.mid_manager.current_index
+            row = self.mid_manager.get_current_row()
+            pages = [self.page_indices[self.current_page_index]] if self.page_indices else []
+            self.manual_review["results"][idx] = {
+                "status": "REJECT",
+                "label": row.get("agency_yr", f"Index {idx}"),
+                "pages": pages
+            }
+            self.logger.info(f"Manually rejected row {idx}")
+            self.next_mid_entry()
+        else:
+            QMessageBox.warning(self, "Reject", "Scrape rejected (not in review mode).")
+
 
     def next_mid_entry(self):
         self.advance_to_valid_entry(direction="next")
@@ -417,7 +468,11 @@ class TextScrapingReviewApp(QMainWindow):
     def open_settings(self):
         self.logger.debug("Attempting to open Settings")
         old_mid_path = self.settings.get("MIDLocation", "")
-        old_mid_df = self.mid_manager.df
+        if hasattr(self, "mid_manager"):
+            old_mid_df = self.mid_manager.df
+        else:
+            old_mid_df = None
+
         dialog = SettingsDialog(self.settings, self)
         if dialog.exec_() == QDialog.Accepted:
             self.logger.info("User updated settings in-app")
@@ -425,6 +480,12 @@ class TextScrapingReviewApp(QMainWindow):
             save_settings(self.settings)
 
             new_mid_path = self.settings.get("MIDLocation", "")
+            if new_mid_path is not None:
+                self.mid_manager = MIDManager(new_mid_path)
+            else:
+                QMessageBox.error("You must select a MID to use the app!")
+                self.logger.error("User did not select a MID")
+                return
             if new_mid_path != old_mid_path or old_mid_path == "":
                 self.logger.info("User updated MID location, attempting to read new data")
                 try:
@@ -456,6 +517,60 @@ class TextScrapingReviewApp(QMainWindow):
         except Exception as e:
             self.logger.critical(f"AUDIT FAILED: {e}")
             QMessageBox.critical(self, "Audit Error", str(e))
+
+    def handle_load_failures(self):
+        test_name = self.failure_test_combo.currentText()
+        self.load_audit_failures(test_name)
+
+
+    def load_audit_failures(self, test_name="text_scraped"):
+        try:
+            log_path = os.path.join(self.settings.get("logFileDirectory", "./logs"), "audit_report.json")
+            with open(log_path, "r", encoding="utf-8") as f:
+                audit_results = json.load(f)
+
+            failed_indices = [
+                entry["index"]
+                for entry in audit_results
+                if entry.get("tests", {}).get(test_name) == "FAIL"
+            ]
+
+            if not failed_indices:
+                QMessageBox.information(self, "No Failures", f"No failures found for test: {test_name}")
+                return
+
+            self.mid_manager.restrict_to_rows(failed_indices)
+            self.logger.info(f"Loaded {len(failed_indices)} failure rows for test '{test_name}' into MID view")
+            self.load_mid_entry_document()
+            
+            self.manual_review["active_test"] = test_name
+            self.manual_review["results"] = {}
+            self.logger.info(f"Manual review mode enabled for test '{test_name}'")
+
+
+
+        except Exception as e:
+            self.logger.error(f"Failed to load audit failures for '{test_name}': {e}")
+            QMessageBox.critical(self, "Error", f"Could not load failures for test '{test_name}':\n{e}")
+
+    def export_review_results(self):
+        if not self.manual_review["active_test"]:
+            QMessageBox.information(self, "Not in Review Mode", "You must be in manual review mode to export results.")
+            return
+
+        try:
+            filename = f"{self.manual_review['active_test']}_review.json"
+            output_path = os.path.join(self.settings.get("logFileDirectory", "./logs"), filename)
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump(self.manual_review["results"], f, indent=2)
+
+            self.logger.info(f"Manual review results saved to {output_path}")
+            QMessageBox.information(self, "Export Complete", f"Review results saved to:\n{output_path}")
+        except Exception as e:
+            self.logger.error(f"Failed to export review results: {e}")
+            QMessageBox.critical(self, "Export Error", str(e))
+
+
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

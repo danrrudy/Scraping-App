@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton,
-    QLabel, QListWidget, QListWidgetItem, QFileDialog, QMessageBox, QInputDialog
+    QLabel, QListWidget, QListWidgetItem, QFileDialog, QMessageBox, QInputDialog, QComboBox
 )
 import os
 from logger import setup_logger
@@ -49,6 +49,20 @@ class ScrapingToolDialog(QDialog):
         add_btn.clicked.connect(self.add_scraping_tool)
         layout.addWidget(add_btn)
 
+        rem_btn = QPushButton("Remove Scraping Tool")
+        rem_btn.clicked.connect(self.remove_scraping_tool)
+        layout.addWidget(rem_btn)
+
+        edit_btn = QPushButton("Edit Tool")
+        edit_btn.clicked.connect(self.edit_scraping_tool)
+        layout.addWidget(edit_btn)
+
+
+        layout.addWidget(QLabel("Default Scraper:"))
+        self.default_combo = QComboBox()
+        self.refresh_default_combo()
+        layout.addWidget(self.default_combo)
+
         ok_btn = QPushButton("OK")
         ok_btn.clicked.connect(self.accept_dialog)
         layout.addWidget(ok_btn)
@@ -87,6 +101,15 @@ class ScrapingToolDialog(QDialog):
             self.logger.debug(f"Refreshing, tool added: {name}")
         self.logger.debug("Tool list refreshed")
 
+    def refresh_default_combo(self):
+        self.default_combo.clear()
+        tool_names = list(self.scraping_tools.keys())
+        self.default_combo.addItems(tool_names)
+        default_name = self.settings.get("defaultScraper", "")
+        if default_name in tool_names:
+            self.default_combo.setCurrentText(default_name)
+
+
     def add_scraping_tool(self):
         name, ok = QInputDialog.getText(self, "Tool Name", "Enter a name for the scraping tool:")
         if not ok or not name:
@@ -116,10 +139,63 @@ class ScrapingToolDialog(QDialog):
             return
         self.scraping_tools[name] = {"path": path, "format_types": type_codes}
         self.refresh_tool_list()
+        self.refresh_default_combo()
+
+    def remove_scraping_tool(self):
+        selected_item = self.tool_list.currentItem()
+        if not selected_item:
+            self.logger.warning("No tool selected to remove!")
+            QMessageBox.warning(self, "No Selection", "Please select a tool to remove")
+            return
+
+        tool_name = selected_item.text().split("->")[0].strip()
+        confirm = QMessageBox.question(
+            self,
+            "Confirm Removal",
+            f"Are you sure you want to remove '{tool_name}'?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if confirm == QMessageBox.Yes:
+            self.scraping_tools.pop(tool_name, None)
+            self.logger.info(f"Removed scraping tool: {tool_name}")
+            self.refresh_tool_list()
+            self.refresh_default_combo()
+
+
+    def edit_scraping_tool(self):
+        selected_item = self.tool_list.currentItem()
+        if not selected_item:
+            self.logger.warning("No tool selected to edit!")
+            QMessageBox.warning(self, "No Selection", "Please select a tool to edit")
+            return
+
+        tool_name = selected_item.text().split("->")[0].strip()
+        config = self.scraping_tools.get(tool_name, {})
+
+        # Prompy for new format types
+        types_str, ok = QInputDialog.getText(
+            self,
+            "Edit Format Codes",
+            f"Current: {config.get('format_types', [])}\nEnter new Format Codes (comma-separated)"
+        )
+        if not ok:
+            return
+        try:
+            type_codes = [int(code.strip()) for code in types_str.split(",")]
+            config["format_types"] = type_codes
+            self.scraping_tools[tool_name] = config
+            self.logger.info(f"Remapped {tool_name} to format codes {type_codes}")
+            self.refresh_tool_list()
+            self.refresh_default_combo()
+        except ValueError:
+            self.logger.warning("Invalid Format Codes!")
+            QMessageBox.warning(self, "Invalid Input", "Format codes must be integers")
+
 
     def accept_dialog(self):
         self.updated_settings["scrapingToolDirectory"] = self.dir_edit.text()
         self.updated_settings["scrapingTools"] = self.scraping_tools
+        self.updated_settings["defaultScraper"] = self.default_combo.currentText()
         self.logger.info("Scraping tools saved")
         
         self.accept()

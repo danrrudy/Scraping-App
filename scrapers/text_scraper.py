@@ -2,9 +2,12 @@ from base_scraper import BaseScraper
 
 class TextScraper(BaseScraper):
     def scrape(self):
-        text = self.page.get_text("text")  # fitz.Page method
+        all_text = []
+        for page in self.pages:
+            text = page.get_text("text")  # fitz.Page method
+            all_text.append(text)
         return {
-            "text": text,
-            "page": self.page.number + 1,  # fitz is zero-indexed
+            "text": "\n\n".join(all_text),
+            "page": [p.number + 1 for p in self.pages],  # fitz is zero-indexed
             "method": "TextScraper"
         }

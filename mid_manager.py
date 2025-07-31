@@ -107,3 +107,8 @@ class MIDManager:
             return []
 
         return sorted(set(p for p in pages if p >= 0))
+
+    def restrict_to_rows(self, row_indices):
+        """Restrict MID to a subset of row indices for focused review."""
+        self.df = self.df.iloc[row_indices].reset_index(drop=True)
+        self.current_index = 0

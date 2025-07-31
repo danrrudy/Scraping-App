@@ -143,6 +143,29 @@ def run_mid_audit(mid_manager, settings):
 
         return False  # goal not found on any listed page = FAIL
 
+    def test_table_detected(row, doc, page_indices, settings):
+        #Expecting tables in these types
+        if row.get("Format_Type") not in [1, 2, 3, 4, 5, 6 ,7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]:
+            return True
+
+        logger.debug(f"Using MTT to detect tables in {row.get("agency_yr","")}")
+        scraper_path = os.path.join(os.path.dirname(__file__), "scrapers", "table_scraper.py")
+        ScraperClass = load_scraper_class(scraper_path)
+
+        try:
+            for page_num in page_indices:
+                page = doc.load_page(page_num)
+                scraper = ScraperClass([page])
+                result = scraper.scrape()
+                if result.get("tables_found", 0) > 0:
+                    logger.debug(f"{result.get("tables_found")} table(s) found in {row.get("agency_yr")} page {page_num}")
+                    return True # Pass if any page detects a table
+        except Exception as e:
+            logger.warning(f"table_detected error on {row.get('agency_yr')}: {e}")
+            return False 
+        logger.debug(f"No tables detected in {row.get("agency_yr")} page {page_num}")
+        return False # No tables found
+
 # List all tests here and define them above. This is the list that is looped over.
     tests = [
         ("pdf_found", test_pdf_found),
@@ -152,6 +175,7 @@ def run_mid_audit(mid_manager, settings):
         ("stratobj_match", test_stratobj_match),
         ("obj_match", test_obj_match),
         ("goal_match", test_goal_match),
+        ("table_detected", test_table_detected),
     ]
 
     # Loop over each row in the MID to run tests
@@ -166,6 +190,7 @@ def run_mid_audit(mid_manager, settings):
         obj = row.get("obj", "UNKNOWN")
         goal = row.get("goal", "UNKNOWN")
         label = f"{row.get('agency', 'UNKNOWN')} ({row.get('year', 'UNKNOWN')})"
+        logger.debug(f"Auditing line {i} of {total_rows}")
 
         entry = {
             "index": i,

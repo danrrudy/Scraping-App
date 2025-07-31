@@ -23,7 +23,8 @@ default_settings = {
     "consoleOutput": "Both", # Writes log to console as well
     "scrapingToolDirectory": os.path.join(os.path.dirname(__file__), "scrapers"), # Default: ./scrapers
     "scrapingTools": {},
-    "dataDirectory": os.path.join(os.path.dirname(__file__), "data") # Default: ./data
+    "dataDirectory": os.path.join(os.path.dirname(__file__), "data"), # Default: ./data
+    "defaultScraper": "" # Name of the scraper to use as a fallback
 }
 
 # Default location for settings file

@@ -1,0 +1,47 @@
+ACCEPT (224):
+  Unique agency-years: 18
+   • AID-2010
+   • CNS-2006
+   • DOD-2003
+   • FAA-2002
+   • FTC-2005
+   • FedReserve-2011
+   • HHS-2009
+   • HUD-2006
+   • JUS-2002
+   • JUS-2003
+   • JUS-2004
+   • JUS-2005
+   • JUS-2006
+   • NRC-2002
+   • PC-2008
+   • PC-2010
+   • SSA-2003
+   • SSA-2008
+
+REJECT (178):
+  Unique agency-years: 24
+   • AID-2002 (very blurry)
+   • BBG-2007 (color & formatting)
+   • BBG-2008 (color & formatting)
+   • CNS-2004 (color & formatting)
+   • EDU-2002 (blue tables)
+   • EDU-2003 (blue tables, small tables)
+   • EDU-2005 (one table, small font & colored)
+   • FEC-2002 (color & sideways)
+   • FEC-2003 (color & sideways)
+   • FEC-2004 (color & sideways)
+   • HUD-2007 (color & formatting)
+   • INT-2004 (sideways & color)
+   • INT-2005 (sideways & color)
+   • INT-2007 (lots of color)
+   • INT-2009 (lots of color)
+   • INT-2010 (lots of color)
+   • JUS-2002 (weird formatting)
+   • JUS-2004 (small)
+   • JUS-2005 (small)
+   • JUS-2006 (small)
+   • NARA-2005 (tough formatting)
+   • SBA-2009 (colored table & shading)
+   • SSA-2008 (bad formatting)
+   • VA-2002 (colored text & bg)

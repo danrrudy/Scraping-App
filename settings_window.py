@@ -17,7 +17,7 @@ class SettingsDialog(QDialog):
         self._init_ui()
 
     def _init_ui(self):
-        logger = setup_logger()
+        self.logger = setup_logger()
         layout = QVBoxLayout(self)
 
         # Mapping of setting keys to possible options
@@ -31,6 +31,9 @@ class SettingsDialog(QDialog):
         # Create a form layout to display and edit settings
         form_layout = QFormLayout()
         self.inputs = {}
+        scraping_tools = self.settings.get("scrapingTools", {})
+        scraper_names = list(scraping_tools.keys())
+        self.options["defaultScraper"] = scraper_names
         # For each key/value pair in the settings dictionary, create a QLineEdit
         for key, value in self.settings.items():
             if key in self.options:
@@ -223,6 +226,19 @@ class SettingsDialog(QDialog):
             # Update settings with user edits
             self.settings.update(dialog.updated_settings)
             self.logger.info("Scraping tools updated")
+
+            scraping_tools = self.settings.get("scrapingTools", {})
+            scraper_names = list(scraping_tools.keys())
+
+            if "defaultScraper" in self.inputs:
+                widget = self.inputs["defaultScraper"]
+                if isinstance(widget, QComboBox):
+                    widget.clear()
+                    widget.addItems(scraper_names)
+                    current_default = self.settings.get("defaultScraper", "")
+                    if current_default in scraper_names:
+                        widget.setCurrentText(current_default)
+
 
     # Future addition: "Reset to Defaults" button
 

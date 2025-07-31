@@ -15,13 +15,13 @@ from abc import ABC, abstractmethod
 #########################################################
 #########################################################
 class BaseScraper(ABC):
-    def __init__(self, page, metadata=None):
+    def __init__(self, pages, metadata=None):
         """
         Parameters:
-            page: A fitz.Page object or image representation.
+            pages: A single or list of fitz.Page objects or image representations.
             metadata: Optional dictionary of context (e.g., agency name, year, Format_Type).
         """
-        self.page = page
+        self.pages = pages if isinstance(pages, list) else [pages]
         self.metadata = metadata or {}
 
     @abstractmethod
