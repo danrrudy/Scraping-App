@@ -29,6 +29,7 @@ class ScrapingToolDialog(QDialog):
     def init_ui(self):
         self.logger.debug("Creating scraping_tool_dialog UI")
         layout = QVBoxLayout()
+
         # File Selection UI
         self.dir_edit = QLineEdit(self.directory)
         browse_btn = QPushButton("Browse Directory")
@@ -57,7 +58,7 @@ class ScrapingToolDialog(QDialog):
         edit_btn.clicked.connect(self.edit_scraping_tool)
         layout.addWidget(edit_btn)
 
-
+        # Drop-down menu for the default scraper
         layout.addWidget(QLabel("Default Scraper:"))
         self.default_combo = QComboBox()
         self.refresh_default_combo()
@@ -76,17 +77,13 @@ class ScrapingToolDialog(QDialog):
             self.logger.warning("./scrapers does not exist! attempting to create directory")
             try:
                 os.makedirs(scraper_dir)
-                # If the Base Scraper Template exists, copy it to the new directory
-                # if os.path.exists(BASE_SCRAPER_TEMPLATE):
-                #     shutil.copy(BASE_SCRAPER_TEMPLATE, os.path.join(scraper_dir, "base_scraper.py"))
-                # else:
-                #     self.logger.error("Base Scraper template not found! Scrapers will not work, redownload app files!")
-                
+
             except Exception as e:
                 self.logger.error("Failed to Create ./scrapers! Tools will not be loaded!")
                 QMessageBox.critical(self, "Error", f"Failed to create scraper directory:\n{e}")
                 return
 
+    # Helper function for selecting a directory
     def select_directory(self):
         path = QFileDialog.getExistingDirectory(self, "Select Scraping Tool Directory")
         if path:
@@ -94,6 +91,7 @@ class ScrapingToolDialog(QDialog):
             self.directory = path
             self.logger.info(f"logger directory changed to {path}")
 
+    # Grabs the list of scraping tools and updates the UI accordingly
     def refresh_tool_list(self):
         self.tool_list.clear()
         for name, config in self.scraping_tools.items():
@@ -101,6 +99,7 @@ class ScrapingToolDialog(QDialog):
             self.logger.debug(f"Refreshing, tool added: {name}")
         self.logger.debug("Tool list refreshed")
 
+    # Grabs the list of scraping tools and updates the default scraper drop-down menu
     def refresh_default_combo(self):
         self.default_combo.clear()
         tool_names = list(self.scraping_tools.keys())
@@ -109,7 +108,7 @@ class ScrapingToolDialog(QDialog):
         if default_name in tool_names:
             self.default_combo.setCurrentText(default_name)
 
-
+    # Main logic handler for tool addition
     def add_scraping_tool(self):
         name, ok = QInputDialog.getText(self, "Tool Name", "Enter a name for the scraping tool:")
         if not ok or not name:
@@ -130,6 +129,7 @@ class ScrapingToolDialog(QDialog):
         types_str, ok = QInputDialog.getText(self, "Format Codes", "Enter format type codes (comma-separated):")
         if not ok:
             return
+
         try:
             type_codes = [int(code.strip()) for code in types_str.split(",")]
             self.logger.info(f"{name} mapped to formats: {types_str}")
@@ -141,6 +141,7 @@ class ScrapingToolDialog(QDialog):
         self.refresh_tool_list()
         self.refresh_default_combo()
 
+    # Remove a scraping tool definition and its associated settings, then update UI
     def remove_scraping_tool(self):
         selected_item = self.tool_list.currentItem()
         if not selected_item:
@@ -161,7 +162,7 @@ class ScrapingToolDialog(QDialog):
             self.refresh_tool_list()
             self.refresh_default_combo()
 
-
+    # Allows the user to change the document type assignments for the selected scraper
     def edit_scraping_tool(self):
         selected_item = self.tool_list.currentItem()
         if not selected_item:

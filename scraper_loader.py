@@ -28,7 +28,6 @@ def load_scraper_class(filepath):
 	logger.error(f"No subclass of BaseScraper found in {filepath}, ensure the scraper is defined properly")
 	raise ImportError(f"No subclass of BaseScraper found in {filepath}")
 
-## TODO: select_scraper: simple dictionary mapping user's settings, then pull the filepath from settings before passing to load_scraper_class
 def select_scraper_class(settings, format_type):
 	logger = setup_logger()
 	logger.debug(f"Selecting scraping tool for format type {format_type}")

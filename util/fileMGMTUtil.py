@@ -23,6 +23,7 @@ def expand_year_range(filename):
     except ValueError:
         return None
 
+# Converts 1 file covering X years to X files covering 1 year
 def expand_file(filename):
     source_path = os.path.join(current_dir, filename)
     if not os.path.isfile(source_path):
@@ -40,7 +41,7 @@ def expand_file(filename):
         print(f"Created: {dest_path}")
 
 
-
+# Simple find and replace all operation on filenames, allows subfolder search by argument
 def find_and_replace_filenames(find_str, replace_str, recursive=False):
     count = 0
     if recursive:
@@ -65,6 +66,8 @@ def find_and_replace_filenames(find_str, replace_str, recursive=False):
     if count == 0:
         print("No matching files found.")
 
+
+# Duplicates a file with the option to rename both old and new versions
 def duplicate_file_or_folder(target, new_name_original, new_name_copy):
     target_path = os.path.join(current_dir, target)
     
@@ -108,6 +111,7 @@ def duplicate_file_or_folder(target, new_name_original, new_name_copy):
     else:
         print(f"Error: '{target_path}' is not a valid file or folder.")
 
+# Within-interface navigation
 def change_directory(path):
     global current_dir
     if os.path.isdir(path):

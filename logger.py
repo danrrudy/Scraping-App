@@ -29,6 +29,7 @@ def enforce_log_retention(log_dir, max_logs):
 			print(f"[Warning] Failed to delete old log file: {old_log} - {e}")
 
 
+# This can be called from any file and all will write to the same log
 def setup_logger():
 	settings = load_settings()
 	level_name = settings.get("loggingLevel", "INFO")

@@ -4,6 +4,8 @@ import pandas as pd
 import re
 from logger import setup_logger
 
+
+# Expected structure for the MID
 EXPECTED_COLUMNS = [
     "agency_yr", "agency", "year", "agid", "subagency", "stratobj",
     "obj", "goal", "metric", "PDF Page Number", "Format", "Format_Detail",
@@ -11,6 +13,7 @@ EXPECTED_COLUMNS = [
     "Other Detail", "Format_Type"
 ]
 
+# Ensure columns are properly typecast
 COLUMN_TYPES = {
     "agency_yr": str,
     "agency": str,
@@ -77,6 +80,7 @@ class MIDManager:
             self.current_index -= 1
 
     # Parse the 'PDF Page Number' field into a list of zero-indexed page numbers
+    # Removes leading p. and expands ranges into a list of integers (inclusive)
     def parse_pdf_pages(self, index=None):
         row = self.get_current_row() if index is None else self.df.iloc[index]
         # Pull the plain text entry and remove whitespace
@@ -108,6 +112,7 @@ class MIDManager:
 
         return sorted(set(p for p in pages if p >= 0))
 
+    # Only show the rows passed in as an argument (for dev mode)
     def restrict_to_rows(self, row_indices):
         """Restrict MID to a subset of row indices for focused review."""
         self.df = self.df.iloc[row_indices].reset_index(drop=True)

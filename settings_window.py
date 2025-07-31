@@ -30,10 +30,14 @@ class SettingsDialog(QDialog):
 
         # Create a form layout to display and edit settings
         form_layout = QFormLayout()
+        # unsaved settings changes
         self.inputs = {}
+
+        # Pull scraping tools to load the default selector
         scraping_tools = self.settings.get("scrapingTools", {})
         scraper_names = list(scraping_tools.keys())
         self.options["defaultScraper"] = scraper_names
+
         # For each key/value pair in the settings dictionary, create a QLineEdit
         for key, value in self.settings.items():
             if key in self.options:
@@ -220,6 +224,7 @@ class SettingsDialog(QDialog):
         )
         return sheet_name if ok else None
 
+    # Creates an instance of ScrapingToolDialog for interactive tool definitions
     def open_scraping_tool_dialog(self):
         dialog = ScrapingToolDialog(self.settings, self)
         if dialog.exec_():

@@ -4,8 +4,10 @@ import shutil
 def flatten_directory():
     current_dir = os.getcwd()
 
+    # scan full dir contents
     for entry in os.listdir(current_dir):
         entry_path = os.path.join(current_dir, entry)
+        # Only operate on folders
         if os.path.isdir(entry_path):
             for root, _, files in os.walk(entry_path):
                 for file in files:

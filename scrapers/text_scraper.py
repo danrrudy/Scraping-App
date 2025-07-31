@@ -8,6 +8,6 @@ class TextScraper(BaseScraper):
             all_text.append(text)
         return {
             "text": "\n\n".join(all_text),
-            "page": [p.number + 1 for p in self.pages],  # fitz is zero-indexed
+            "page": [p.number + 1 for p in self.pages],  # fitz is zero-indexed, return 1-indexed
             "method": "TextScraper"
         }

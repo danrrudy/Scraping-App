@@ -27,7 +27,6 @@ from settings_window import SettingsDialog
 from app_settings import load_settings, save_settings
 from mid_manager import MIDManager
 from logger import setup_logger
-# from scraper_loader import load_scraper_class
 from scraper_loader import select_scraper_class
 from audit_runner import run_mid_audit
 
@@ -50,47 +49,52 @@ class TextScrapingReviewApp(QMainWindow):
         self.mid_df = None
         self.current_mid_index = 0
 
+        # Initiate the MID manager if settings are already set
         mid_path = self.settings.get("MIDLocation", "")
         if mid_path:
             try:
                 self.mid_manager = MIDManager(mid_path)
                 self.logger.info("Successfully loaded MID")
             except Exception as e:
-                self.logger.critical(f"Failed to Load MID: {e}")
-                QMessageBox.critical(self, "Error Loading MID", str(e))
+                self.logger.error(f"Failed to Load MID: {e}")
         else:
             self.logger.warning("MID Location not specified, user alerted")
+            # Notfiy the user via popup if the MID cannot be loaded
+            # NOTE: This still executes at first launch, which is proabably bad form
             QMessageBox.warning(self, "MID Location not Specified", "Please select a Master Input Document in Settings.")
 
 
-        self.doc = None
-        self.page_indices = [] # List of all zero-indexed pages recorded in the MID
-        self.current_page_index = 0
-        self.current_agency_yr = None
-        self.scraped_text = ""
-        self.info_labels = {}
-        self.manual_review = {
+        self.doc = None                 # Current page
+        self.page_indices = []          # List of all zero-indexed pages recorded in the MID
+        self.current_page_index = 0     # Index of current page, not page number
+        self.current_agency_yr = None   # Agency-year field
+        self.scraped_text = ""          # Text to display in RH column
+        self.info_labels = {}           # Dictionary of info to display in UI
+        self.manual_review = {          # Structure for tracking user Accept/Rejects (will likely be changed)
             "active_test": None,
             "results": {},  # format: {row_index: {"status": "ACCEPT" or "REJECT", "label": ..., "pages": [...]}}
         }
 
 
+        # Set up file structure if it doesn't exist
         self.init_files()
 
         self.init_ui()
 
+        # Attempt to load the first document
         if hasattr(self, "mid_manager") and self.mid_manager.df is not None:
             success = self.load_mid_entry_document()
             if not success:
                 self.logger.warning("First MID row failed to load; check file accessibility or page numbers.")
             else:
                 self.logger.debug("First MID row loaded successfully")
-                # self.scrape_page()
 
         
 
     def init_ui(self):
         self.logger.debug("Initializing UI")
+
+        # Document Display Window
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QHBoxLayout(central_widget)
@@ -102,7 +106,7 @@ class TextScrapingReviewApp(QMainWindow):
         self.entry_index_label.setStyleSheet("font-weight: bold;")
         info_layout.addWidget(self.entry_index_label)
 
-
+        # Information fields to display
         self.info_fields = ["File", "Agency", "Year", "Page", "Format"]
 
         # Dynamically create info fields to enhance modularity
@@ -166,6 +170,9 @@ class TextScrapingReviewApp(QMainWindow):
         control_layout.addWidget(audit_btn)
         self.logger.debug("Added Audit button")
 
+
+        # Dev mode feature to review test failures, will need to dynamically load test names later
+        # This field is the drop-down to select the test
         self.failure_test_combo = QComboBox()
         self.failure_test_combo.addItems([
             "table_detected", "text_scraped", "goal_match", "obj_match",
@@ -174,6 +181,7 @@ class TextScrapingReviewApp(QMainWindow):
         control_layout.addWidget(QLabel("Load Failures For Test:"))
         control_layout.addWidget(self.failure_test_combo)
 
+        # Restrict the MID entries to only those that failed the selected test
         load_failures_btn = QPushButton("Load Failures")
         load_failures_btn.clicked.connect(self.handle_load_failures)
         control_layout.addWidget(load_failures_btn)
@@ -183,7 +191,7 @@ class TextScrapingReviewApp(QMainWindow):
         control_layout.addWidget(export_review_btn)
 
 
-
+        # Fill empty space
         control_layout.addStretch()
         side_panel = QVBoxLayout()
         side_panel.addLayout(info_layout)
@@ -233,6 +241,7 @@ class TextScrapingReviewApp(QMainWindow):
         row = self.mid_manager.get_current_row()
         current_mid_index = self.mid_manager.current_index
 
+        # Display the current MID index and the total number of rows
         if row is not None:
             if hasattr(self, "entry_index_label"):
                 self.entry_index_label.setText(
@@ -240,6 +249,7 @@ class TextScrapingReviewApp(QMainWindow):
                 )
             current_format_type = row.get("Format_Type", "")
 
+        # Map variables to their display lables manually if they are not the same
         for key, label in self.info_labels.items():
             if key == "page":
                 value = page_num
@@ -274,6 +284,7 @@ class TextScrapingReviewApp(QMainWindow):
             self.logger.error("No MID row found")
             return False
 
+        # Extract necessary information from the row
         agency = row.get("agency", "UNKNOWN").strip()
         year = str(row.get("year", "UNKNOWN")).strip()
         agency_yr = row.get("agency_yr", "").strip()
@@ -284,6 +295,9 @@ class TextScrapingReviewApp(QMainWindow):
             return False
 
         self.current_agency_yr = agency_yr
+
+        # Load the file
+        # Handle any hyphen-underscore mixups
         filename = f"{agency_yr.replace('-','_')}.pdf"
         path = os.path.join(self.settings.get("dataDirectory", ""), filename)
 
@@ -338,31 +352,34 @@ class TextScrapingReviewApp(QMainWindow):
         # Display document information
         self.update_info_labels()
 
+    # Simple UI update function when the window size is changed
     def resizeEvent(self, event):
         self.logger.debug("Window resized")
         super().resizeEvent(event)
         self.show_page()
 
+    # Advances to next page and scrapes it
     def next_page(self):
         self.logger.debug("Attempting to load next page")
         if self.page_indices and self.current_page_index < len(self.page_indices) - 1:
             self.logger.debug("Next page is valid")
             self.current_page_index += 1
             self.show_page()
-
         else:
             self.logger.warning("Attempted to load nonexistent page")
 
+    # Moves to previous page and attempts to scrape it
     def prev_page(self):
         self.logger.debug("Attempting to load previous page")
         if self.page_indices and self.current_page_index > 0:
             self.logger.debug("Previous page is valid")
             self.current_page_index -= 1
             self.show_page()
-
         else:
             self.logger.warning("Attempted to load nonexistent page")
 
+
+    # Call the scraping tool engine and run the appropriate scraper on the current page
     def scrape_page(self):
         self.logger.debug("Attempting to scrape page")
 
@@ -403,7 +420,7 @@ class TextScrapingReviewApp(QMainWindow):
             self.logger.critical(f"failed to scrape page {actual_page_number+1}: {e}")
             QMessageBox.critical(self, "Scrape Error", str(e))
 
-
+    # Currently only implemented in dev mode
     def accept_scrape(self):
         if self.manual_review["active_test"]:
             idx = self.mid_manager.current_index
@@ -419,7 +436,7 @@ class TextScrapingReviewApp(QMainWindow):
         else:
             QMessageBox.information(self, "Accept", "Scrape accepted (not in review mode).")
 
-
+    # Currently only implemented in dev mode
     def reject_scrape(self):
         if self.manual_review["active_test"]:
             idx = self.mid_manager.current_index
@@ -435,15 +452,18 @@ class TextScrapingReviewApp(QMainWindow):
         else:
             QMessageBox.warning(self, "Reject", "Scrape rejected (not in review mode).")
 
-
+    # Move to the next entry without any output
     def next_mid_entry(self):
         self.advance_to_valid_entry(direction="next")
         # self.scrape_page()
 
+    # Move to previous entry without any output
     def prev_mid_entry(self):
         self.advance_to_valid_entry(direction="prev")
         # self.scrape_page()
 
+
+    # Handle any missing entries or pages that can't be loaded
     def advance_to_valid_entry(self, direction="next"):
         while True:
             if direction == "next":
@@ -464,9 +484,11 @@ class TextScrapingReviewApp(QMainWindow):
                 current_index = self.mid_manager.current_index
                 self.logger.warning(f"Skipping invalid MID entry at index {current_index}")
 
-
+    # Creates an instance of SettingsWindow for user to update settings
     def open_settings(self):
         self.logger.debug("Attempting to open Settings")
+
+        # Save the old MID path in case the user enters an invalid path
         old_mid_path = self.settings.get("MIDLocation", "")
         if hasattr(self, "mid_manager"):
             old_mid_df = self.mid_manager.df
@@ -474,6 +496,8 @@ class TextScrapingReviewApp(QMainWindow):
             old_mid_df = None
 
         dialog = SettingsDialog(self.settings, self)
+
+        # Save new settings from user's inputs
         if dialog.exec_() == QDialog.Accepted:
             self.logger.info("User updated settings in-app")
             self.settings = dialog.settings
@@ -509,6 +533,7 @@ class TextScrapingReviewApp(QMainWindow):
                     self.logger.warning("Previous MID State Recovered")
                     QMessageBox.critical(self, "Error Loading MID", f"Previous MID state restored. \n\n{str(e)}")
 
+    # runs the suite of MID audit functions defined in audit_runner.py
     def run_mid_audit(self):
         self.logger.info("Starting MID Audit")
         try:
@@ -518,11 +543,13 @@ class TextScrapingReviewApp(QMainWindow):
             self.logger.critical(f"AUDIT FAILED: {e}")
             QMessageBox.critical(self, "Audit Error", str(e))
 
+    # basic handler for the fialure loading function below
     def handle_load_failures(self):
         test_name = self.failure_test_combo.currentText()
         self.load_audit_failures(test_name)
 
 
+    # Restrict the MID to only entries where the file failed the selected test. Default to cases where the doc loaded but wasn't scraped
     def load_audit_failures(self, test_name="text_scraped"):
         try:
             log_path = os.path.join(self.settings.get("logFileDirectory", "./logs"), "audit_report.json")
@@ -553,6 +580,7 @@ class TextScrapingReviewApp(QMainWindow):
             self.logger.error(f"Failed to load audit failures for '{test_name}': {e}")
             QMessageBox.critical(self, "Error", f"Could not load failures for test '{test_name}':\n{e}")
 
+    # Save manual reveiw results to JSON (Dev mode only)
     def export_review_results(self):
         if not self.manual_review["active_test"]:
             QMessageBox.information(self, "Not in Review Mode", "You must be in manual review mode to export results.")
