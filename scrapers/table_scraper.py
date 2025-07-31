@@ -30,5 +30,5 @@ class TableScraper(BaseScraper):
             "tables_found": tables_found,
             "text": f"{tables_found} table(s) detected",
             "page": page.number + 1,
-            "method": "TableDetectionScraper"
+            "method": "TableScraper"
         }
