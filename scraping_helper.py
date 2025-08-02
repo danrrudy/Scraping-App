@@ -46,6 +46,7 @@ class TextScrapingReviewApp(QMainWindow):
         self.resize(1200, 800)
 
         self.settings = load_settings()
+        self.mode = self.settings.get("userMode", "User").lower()
         self.mid_df = None
         self.current_mid_index = 0
 
@@ -63,6 +64,9 @@ class TextScrapingReviewApp(QMainWindow):
             # NOTE: This still executes at first launch, which is proabably bad form
             QMessageBox.warning(self, "MID Location not Specified", "Please select a Master Input Document in Settings.")
 
+
+        self.dev_mode_widgets = []
+        self.user_mode_widgets = []
 
         self.doc = None                 # Current page
         self.page_indices = []          # List of all zero-indexed pages recorded in the MID
@@ -92,7 +96,7 @@ class TextScrapingReviewApp(QMainWindow):
         
 
     def init_ui(self):
-        self.logger.debug("Initializing UI")
+        self.logger.debug(f"Initializing UI in {self.mode} mode")
 
         # Document Display Window
         central_widget = QWidget()
@@ -106,10 +110,17 @@ class TextScrapingReviewApp(QMainWindow):
         self.entry_index_label.setStyleSheet("font-weight: bold;")
         info_layout.addWidget(self.entry_index_label)
 
-        # Information fields to display
-        self.info_fields = ["File", "Agency", "Year", "Page", "Format"]
 
-        # Dynamically create info fields to enhance modularity
+        # Set information fields
+        if self.mode == "dev":
+            self.info_fields = ["File", "Format"]
+
+        else:
+            # Information fields to display
+            self.info_fields = ["File", "Agency", "Year", "Page", "Format"]
+
+
+        # Dynamically create info fields based on assignment above
         for field in self.info_fields:
             label = QLabel(f"{field.capitalize()}: ")
             label.setStyleSheet("font-weight: bold;")
@@ -140,12 +151,12 @@ class TextScrapingReviewApp(QMainWindow):
         control_layout.addWidget(scrape_btn)
         self.logger.debug("Added Scrape Page button")
 
-        accept_btn = QPushButton("Accept Scrape")
+        accept_btn = QPushButton("Accept")
         accept_btn.clicked.connect(self.accept_scrape)
         control_layout.addWidget(accept_btn)
         self.logger.debug("Added Accept Scrape button")
 
-        reject_btn = QPushButton("Reject Scrape")
+        reject_btn = QPushButton("Reject")
         reject_btn.clicked.connect(self.reject_scrape)
         control_layout.addWidget(reject_btn)
         self.logger.debug("Added Reject Scrape button")
@@ -168,6 +179,7 @@ class TextScrapingReviewApp(QMainWindow):
         audit_btn = QPushButton("Run MID Audit")
         audit_btn.clicked.connect(self.run_mid_audit)
         control_layout.addWidget(audit_btn)
+        self.dev_mode_widgets.append(audit_btn)
         self.logger.debug("Added Audit button")
 
 
@@ -178,17 +190,22 @@ class TextScrapingReviewApp(QMainWindow):
             "table_detected", "text_scraped", "goal_match", "obj_match",
             "keyword_match", "stratobj_match", "pages_parsed", "pdf_found"
         ])
-        control_layout.addWidget(QLabel("Load Failures For Test:"))
+        failures_label = QLabel("Load Failures For Test:")
+        control_layout.addWidget(failures_label)
         control_layout.addWidget(self.failure_test_combo)
+        self.dev_mode_widgets.append(self.failure_test_combo)
+        self.dev_mode_widgets.append(failures_label)
 
         # Restrict the MID entries to only those that failed the selected test
         load_failures_btn = QPushButton("Load Failures")
         load_failures_btn.clicked.connect(self.handle_load_failures)
         control_layout.addWidget(load_failures_btn)
+        self.dev_mode_widgets.append(load_failures_btn)
 
         export_review_btn = QPushButton("Export Review Results")
         export_review_btn.clicked.connect(self.export_review_results)
         control_layout.addWidget(export_review_btn)
+        self.dev_mode_widgets.append(export_review_btn)
 
 
         # Fill empty space
@@ -215,12 +232,15 @@ class TextScrapingReviewApp(QMainWindow):
         splitter.setStretchFactor(1, 2)
         main_layout.addWidget(splitter, 4)
 
-
+        # hide the dev mode labels if in user mode and v.v.
+        self.update_mode_ui()
 
     # Create Necessary File Structure
     def init_files(self):
         # Check if the "./data" directory exists; if not, create it
         data_dir = self.settings.get("dataDirectory", "")
+        self.accept_dir = os.path.join(data_dir, "accepted")
+        self.reject_dir = os.path.join(data_dir, "rejected")
         if data_dir and not os.path.exists(data_dir):
             self.logger.warning("./data does not exist! attempting to create directory")
             try:
@@ -230,6 +250,19 @@ class TextScrapingReviewApp(QMainWindow):
                 self.logger.error("Failed to Create ./data! Files will not be loaded!")
                 QMessageBox.critical(self, "Error", f"Failed to create data directory:\n{e}")
                 return
+        if not os.path.exists(self.accept_dir):
+            self.logger.info("./data/accepted does not exist, creating")
+            try:
+                os.makedirs(self.accept_dir)
+            except Exception as e:
+                self.logger.error("Failed to Create ./data/accepted!")
+        if not os.path.exists(self.reject_dir):
+            self.logger.info("./data/rejected does not exist, creating")
+            try:
+                os.makedirs(self.reject_dir)
+            except Exception as e:
+                self.logger.error("Failed to Create ./data/rejected!")
+
         # TODO: Consolodate this and other file management functions into a utils library
 
     # Update read-only information for user
@@ -262,6 +295,16 @@ class TextScrapingReviewApp(QMainWindow):
             else:
                 value = "N/A"
             label.setText(f"{key.capitalize()}: {value}")
+
+    def update_mode_ui(self):
+        is_dev = self.mode.lower() == "dev"
+        self.logger.info("updating UI for dev mode") if is_dev else self.logger.info("updating UI for user mode")
+
+        for widget in self.dev_mode_widgets:
+            widget.setVisible(is_dev)
+
+        for widget in self.user_mode_widgets:
+            widget.setVisible(not is_dev)
 
     # For manual document loading - will likely be depricated
     def load_document(self):
@@ -502,6 +545,8 @@ class TextScrapingReviewApp(QMainWindow):
             self.logger.info("User updated settings in-app")
             self.settings = dialog.settings
             save_settings(self.settings)
+            self.mode = self.settings.get("userMode", "User")
+            self.update_mode_ui()
 
             new_mid_path = self.settings.get("MIDLocation", "")
             if new_mid_path is not None:
@@ -532,6 +577,8 @@ class TextScrapingReviewApp(QMainWindow):
                     self.logger.critical(f"Error Loading MID: {e}")
                     self.logger.warning("Previous MID State Recovered")
                     QMessageBox.critical(self, "Error Loading MID", f"Previous MID state restored. \n\n{str(e)}")
+            
+
 
     # runs the suite of MID audit functions defined in audit_runner.py
     def run_mid_audit(self):

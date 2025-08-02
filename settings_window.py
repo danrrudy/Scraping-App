@@ -25,7 +25,8 @@ class SettingsDialog(QDialog):
             "fontSize": ["10", "12", "14", "16", "18"],
             "loggingLevel": ["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"],
             #logFileDirectory: Filepath, no options
-            "consoleOutput": ["File", "Console", "Both"]
+            "consoleOutput": ["File", "Console", "Both"],
+            "userMode": ["User", "Dev"]
         }
 
         # Create a form layout to display and edit settings
@@ -38,7 +39,7 @@ class SettingsDialog(QDialog):
         scraper_names = list(scraping_tools.keys())
         self.options["defaultScraper"] = scraper_names
 
-        # For each key/value pair in the settings dictionary, create a QLineEdit
+        # For each key/value pair in the options dictionary above, create a QComboBox (drop-down)
         for key, value in self.settings.items():
             if key in self.options:
                 combo = QComboBox()

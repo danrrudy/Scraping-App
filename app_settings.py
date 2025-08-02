@@ -24,7 +24,8 @@ default_settings = {
     "scrapingToolDirectory": os.path.join(os.path.dirname(__file__), "scrapers"), # Default: ./scrapers
     "scrapingTools": {},
     "dataDirectory": os.path.join(os.path.dirname(__file__), "data"), # Default: ./data
-    "defaultScraper": "" # Name of the scraper to use as a fallback
+    "defaultScraper": "", # Name of the scraper to use as a fallback
+    "userMode": "User"
 }
 
 # Default location for settings file
