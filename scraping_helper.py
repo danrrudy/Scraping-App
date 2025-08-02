@@ -465,35 +465,59 @@ class TextScrapingReviewApp(QMainWindow):
 
     # Currently only implemented in dev mode
     def accept_scrape(self):
-        if self.manual_review["active_test"]:
-            idx = self.mid_manager.current_index
-            row = self.mid_manager.get_current_row()
-            pages = [self.page_indices[self.current_page_index]] if self.page_indices else []
-            self.manual_review["results"][idx] = {
-                "status": "ACCEPT",
-                "label": row.get("agency_yr", f"Index {idx}"),
-                "pages": pages
-            }
-            self.logger.info(f"Manually accepted row {idx}")
-            self.next_mid_entry()
+        if self.mode == "dev":
+            if self.manual_review["active_test"]:
+                idx = self.mid_manager.current_index
+                row = self.mid_manager.get_current_row()
+                pages = [self.page_indices[self.current_page_index]] if self.page_indices else []
+                self.manual_review["results"][idx] = {
+                    "status": "ACCEPT",
+                    "label": row.get("agency_yr", f"Index {idx}"),
+                    "pages": pages
+                }
+                self.logger.info(f"Manually accepted row {idx}")
+            # User is not reviewing a test
+            else:
+                QMessageBox.warning(self, "Accept", "No active test! Switch to user mode to review scraping results or select a test")
+        # User is in User mode
         else:
-            QMessageBox.information(self, "Accept", "Scrape accepted (not in review mode).")
+            if self.doc:
+                agency_yr = self.current_agency_yr.replace("-","_")
+                output_path = os.path.join(self.accept_dir, f"{agency_yr}_full.txt")
+                with open(output_path, "w", encoding = "utf-8") as f:
+                    # use the contents of the text edit window in case the user made manual edits
+                    f.write(self.text_edit.toPlainText())
+                self.logger.info(f"Saved accepted scrape to {output_path}")
+
+        # Outside conditional
+        self.next_mid_entry()
 
     # Currently only implemented in dev mode
     def reject_scrape(self):
-        if self.manual_review["active_test"]:
-            idx = self.mid_manager.current_index
-            row = self.mid_manager.get_current_row()
-            pages = [self.page_indices[self.current_page_index]] if self.page_indices else []
-            self.manual_review["results"][idx] = {
-                "status": "REJECT",
-                "label": row.get("agency_yr", f"Index {idx}"),
-                "pages": pages
-            }
-            self.logger.info(f"Manually rejected row {idx}")
-            self.next_mid_entry()
+        if self.mode == "dev":
+            if self.manual_review["active_test"]:
+                idx = self.mid_manager.current_index
+                row = self.mid_manager.get_current_row()
+                pages = [self.page_indices[self.current_page_index]] if self.page_indices else []
+                self.manual_review["results"][idx] = {
+                    "status": "REJECT",
+                    "label": row.get("agency_yr", f"Index {idx}"),
+                    "pages": pages
+                }
+                self.logger.info(f"Manually rejected row {idx}")
+                self.next_mid_entry()
+            else:
+                QMessageBox.warning(self, "Reject", "No active test! Switch to user mode to review scraping results or select a test")
+        # User Mode:
         else:
-            QMessageBox.warning(self, "Reject", "Scrape rejected (not in review mode).")
+            if self.doc:
+                agency_yr = self.current_agency_yr.replace("-","_")
+                output_path = os.path.join(self.reject_dir, f"{agency_yr}_full.txt")
+                with open(output_path, "w", encoding = "utf-8") as f:
+                    f.write(self.text_edit.toPlainText())
+                self.logger.info(f"Saved rejected scrape to {output_path}")
+
+
 
     # Move to the next entry without any output
     def next_mid_entry(self):
