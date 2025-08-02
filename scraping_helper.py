@@ -73,6 +73,8 @@ class TextScrapingReviewApp(QMainWindow):
         self.current_page_index = 0     # Index of current page, not page number
         self.current_agency_yr = None   # Agency-year field
         self.scraped_text = ""          # Text to display in RH column
+        self.page_text_cache = []       # List of strings, each containing the text of a page
+
         self.info_labels = {}           # Dictionary of info to display in UI
         self.manual_review = {          # Structure for tracking user Accept/Rejects (will likely be changed)
             "active_test": None,
@@ -240,6 +242,7 @@ class TextScrapingReviewApp(QMainWindow):
         # Check if the "./data" directory exists; if not, create it
         data_dir = self.settings.get("dataDirectory", "")
         self.accept_dir = os.path.join(data_dir, "accepted")
+        self.formatted_dir = os.path.join(self.accept_dir, "formatted")
         self.reject_dir = os.path.join(data_dir, "rejected")
         if data_dir and not os.path.exists(data_dir):
             self.logger.warning("./data does not exist! attempting to create directory")
@@ -250,12 +253,23 @@ class TextScrapingReviewApp(QMainWindow):
                 self.logger.error("Failed to Create ./data! Files will not be loaded!")
                 QMessageBox.critical(self, "Error", f"Failed to create data directory:\n{e}")
                 return
+
+        # Stage 1 accepted directory
         if not os.path.exists(self.accept_dir):
             self.logger.info("./data/accepted does not exist, creating")
             try:
                 os.makedirs(self.accept_dir)
             except Exception as e:
                 self.logger.error("Failed to Create ./data/accepted!")
+
+        # Stage 2 accepted directory
+        if not os.path.exists(self.formatted_dir):
+            try:
+                os.makedirs(self.formatted_dir)
+            except Exception as e:
+                self.logger.error("Failed to Create ./data/accepted/formatted!")
+        
+        # Stage 1 rejected directory
         if not os.path.exists(self.reject_dir):
             self.logger.info("./data/rejected does not exist, creating")
             try:
@@ -350,14 +364,37 @@ class TextScrapingReviewApp(QMainWindow):
         try:
             self.doc = fitz.open(path)
             self.page_indices = self.mid_manager.parse_pdf_pages()
+
             if not self.page_indices:
                 self.logger.error(f"No valid pages found for {label} - PDF Page number field: '{row.get('PDF Page Number', '')}' ")
                 return False
 
-            self.current_page_index = 0
-            # PyMuPDF is 0-indexed, add 1 to match user's expected range
-            display_pages = [p+1 for p in self.page_indices]
-            self.logger.info(f"Loaded {filename} for {label}, pages: {display_pages}")
+            self.page_text_cache = [""] * len(self.page_indices)
+
+            try:
+                ScraperClass = select_scraper_class(self.settings, int(row.get("Format_Type", -1)))
+                pages = [self.doc.load_page(p) for p in self.page_indices]
+                Scraper = ScraperClass(pages)
+                result = Scraper.scrape()
+                
+                text_result = result.get("text", [])
+                if not isinstance(text_result, list):
+                    raise ValueError("Expected a list of strings from the Scraper!")
+
+                if len(text_result) != len(self.page_indices):
+                    self.logger.warning(f"Scraper returned {len(text_result)} pages, expected {len(self.page_indices)}")
+
+                self.page_text_cache = text_result
+                self.logger.info(f"Scraped {len(self.page_text_cache)} pages from {label}")    
+
+            except Exception as e:
+                self.logger.error(f"Failed to scrape all pages for {label}: {e}")
+
+
+            # self.current_page_index = 0
+            # # PyMuPDF is 0-indexed, add 1 to match user's expected range
+            # display_pages = [p+1 for p in self.page_indices]
+            # self.logger.info(f"Loaded {filename} for {label}, pages: {display_pages}")
             self.show_page()
             return True
 
@@ -376,6 +413,7 @@ class TextScrapingReviewApp(QMainWindow):
         else:
             self.logger.warning("No page reference found, defaulting to page 1!")
             page_number = self.current_page_index
+        self.logger.debug(f"Attempting to load index {self.current_page_index}, page {page_number}")
         page = self.doc.load_page(page_number)
 
         # Render the page and upscale by 2x
@@ -386,12 +424,12 @@ class TextScrapingReviewApp(QMainWindow):
             pixmap.scaled(self.pdf_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
         )
 
-        # Clear any previous scraped text
-        self.text_edit.clear()
-        self.scraped_text = ""
+        if 0 <= self.current_page_index < len(self.page_text_cache):
+            self.text_edit.setPlainText(self.page_text_cache[self.current_page_index])
+        else:
+            self.text_edit.clear()
 
-        # Scrape the new page
-        self.scrape_page()
+
         # Display document information
         self.update_info_labels()
 
@@ -405,6 +443,7 @@ class TextScrapingReviewApp(QMainWindow):
     def next_page(self):
         self.logger.debug("Attempting to load next page")
         if self.page_indices and self.current_page_index < len(self.page_indices) - 1:
+            self.page_text_cache[self.current_page_index] = self.text_edit.toPlainText()
             self.logger.debug("Next page is valid")
             self.current_page_index += 1
             self.show_page()
@@ -415,6 +454,7 @@ class TextScrapingReviewApp(QMainWindow):
     def prev_page(self):
         self.logger.debug("Attempting to load previous page")
         if self.page_indices and self.current_page_index > 0:
+            self.page_text_cache[self.current_page_index] = self.text_edit.toPlainText()
             self.logger.debug("Previous page is valid")
             self.current_page_index -= 1
             self.show_page()
@@ -422,9 +462,9 @@ class TextScrapingReviewApp(QMainWindow):
             self.logger.warning("Attempted to load nonexistent page")
 
 
-    # Call the scraping tool engine and run the appropriate scraper on the current page
+    # Call the scraping tool engine and run the appropriate scraper on the current page only
     def scrape_page(self):
-        self.logger.debug("Attempting to scrape page")
+        self.logger.debug(f"Attempting to scrape page {self.current_page_index}")
 
         if not self.doc or self.mid_manager.df is None:
             self.logger.warning("Document or MID is missing!")
@@ -453,8 +493,8 @@ class TextScrapingReviewApp(QMainWindow):
             scraper = ScraperClass([page])
             result = scraper.scrape()
 
-            self.scraped_text = result.get("text", "")
-            self.text_edit.setPlainText(self.scraped_text)
+            self.scraped_text = result.get("text", [""])
+            self.text_edit.setPlainText(self.scraped_text[0])
 
             # Add 1, as actual_page_number is 0-indexed
             self.logger.debug(f"Scraped page {actual_page_number+1}")
@@ -463,7 +503,7 @@ class TextScrapingReviewApp(QMainWindow):
             self.logger.critical(f"failed to scrape page {actual_page_number+1}: {e}")
             QMessageBox.critical(self, "Scrape Error", str(e))
 
-    # Currently only implemented in dev mode
+
     def accept_scrape(self):
         if self.mode == "dev":
             if self.manual_review["active_test"]:
@@ -484,15 +524,16 @@ class TextScrapingReviewApp(QMainWindow):
             if self.doc:
                 agency_yr = self.current_agency_yr.replace("-","_")
                 output_path = os.path.join(self.accept_dir, f"{agency_yr}_full.txt")
+                full_text = "\n\n".join(self.page_text_cache)
                 with open(output_path, "w", encoding = "utf-8") as f:
                     # use the contents of the text edit window in case the user made manual edits
-                    f.write(self.text_edit.toPlainText())
+                    f.write(full_text)
                 self.logger.info(f"Saved accepted scrape to {output_path}")
 
         # Outside conditional
         self.next_mid_entry()
 
-    # Currently only implemented in dev mode
+
     def reject_scrape(self):
         if self.mode == "dev":
             if self.manual_review["active_test"]:
@@ -513,8 +554,9 @@ class TextScrapingReviewApp(QMainWindow):
             if self.doc:
                 agency_yr = self.current_agency_yr.replace("-","_")
                 output_path = os.path.join(self.reject_dir, f"{agency_yr}_full.txt")
+                full_text = "\n\n".join(self.page_text_cache)
                 with open(output_path, "w", encoding = "utf-8") as f:
-                    f.write(self.text_edit.toPlainText())
+                    f.write(full_text)
                 self.logger.info(f"Saved rejected scrape to {output_path}")
 
 

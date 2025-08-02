@@ -15,25 +15,27 @@ model.eval()
 # TableScraper is only implemented for single pages at this point
 class TableScraper(BaseScraper):
     def scrape(self):
-        page = self.pages[0]  # one page at a time for now
-        image = pdf_page_to_pil(page, scale=2.0)                # From image_utils
-        inputs = processor(images=image, return_tensors="pt")
+        all_text = []
+        for page in self.pages:
+            image = pdf_page_to_pil(page, scale=2.0)                # From image_utils
+            inputs = processor(images=image, return_tensors="pt")
 
-        with torch.no_grad():
-            outputs = model(**inputs)
+            with torch.no_grad():
+                outputs = model(**inputs)
 
-        target_size = torch.tensor([image.size[::-1]])
-        results = processor.post_process_object_detection(outputs, target_sizes=target_size, threshold=0.8)[0]
+            target_size = torch.tensor([image.size[::-1]])
+            results = processor.post_process_object_detection(outputs, target_sizes=target_size, threshold=0.8)[0]
 
-        # Grab all object the model labeled as a table. In the future, attach diagnostic statistics to this such as confidence.
-        tables_found = sum(
-            1 for label in results["labels"]
-            if model.config.id2label[label.item()] == "table"
-        )
+            # Grab all object the model labeled as a table. In the future, attach diagnostic statistics to this such as confidence.
+            tables_found = sum(
+                1 for label in results["labels"]
+                if model.config.id2label[label.item()] == "table"
+            )
+            all_text.append(f"{tables_found} table(s) detected")
 
         return {
             "tables_found": tables_found,
-            "text": f"{tables_found} table(s) detected",
-            "page": page.number + 1,
+            "text": all_text,
+            "pages": [p.number + 1 for p in self.pages],
             "method": "TableScraper"
         }
