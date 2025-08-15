@@ -173,6 +173,27 @@ def run_mid_audit(mid_manager, settings):
                     output_path = os.path.join(output_dir, f"{row.get('agency_yr','unknown')}_page_{page_num+1}.png")
                     result.get("images")[0].save(output_path)
                     logger.debug("Diagnostic Image Saved")
+                    # Save structure content to text file
+                    table_payloads = result.get("tables", [])
+                    if table_payloads:
+                        for idx, table in enumerate(table_payloads, start=1):
+                            structure = table.get("structures", [])
+                            if not structure:
+                                continue
+                            txt_lines = []
+                            for elem in structure:
+                                elem_id = elem.get("id", "?")
+                                label = elem.get("label", "")
+                                content = elem.get("ocr_text", "")
+                                txt_lines.append(f"ID: {elem_id} | {label} -> {content}")
+
+                            struct_path = os.path.join(
+                                output_dir,
+                                f"{row.get('agency_yr','unknown')}_page_{page_num+1}_table_{idx}_structure.txt"
+                            )
+                            with open(struct_path, "w", encoding="utf-8") as f:
+                                f.write("\n".join(txt_lines))
+                            logger.debug(f"Structure data saved to {struct_path}")
                     return True # Pass if any page detects a table
         except Exception as e:
             logger.warning(f"table_detected error on {row.get('agency_yr')}: {e}")

@@ -1,0 +1,184 @@
+ID: p13-t0-s0 | table row -> _
+| Strategic Goal 2: Ensure Our National Forests and Private Working Lands are Conserved, Restored, and Made More Resilient to
+Climate Chanae, While Enhancing Our Water Resources
+ID: p13-t0-s1 | table row -> 2.1.5 EQIP: Grazing land and forest land with conservation plans applied to Met
+protect and improve the resource base
+ID: p13-t0-s2 | table row -> 1.1.2 Number of borrowers/subscribers receiving new or improved Unmet
+telecommunication services
+ID: p13-t0-s3 | table row -> 0
+| 1.3.6 Normalized value of FCIC risk protection coverage provided through Met
+FCIC snonsored insurance
+ID: p13-t0-s4 | table row -> | | 1.3.7 Percent of industry compliance with the Packers Stockyards Act | Unmet
+ID: p13-t0-s5 | table row -> | 1.1 Enhance Rural Prosperity | 114 Nummbetot bigs created or saved through USDA financing of Unmet
+ID: p13-t0-s6 | table row -> | Strategic Goal 1: Assist Rural Communities to Create Prosperity So they are self sustaining, repopulating and Economically Thriving
+ID: p13-t0-s7 | table column -> =
+11
+12
+13
+24
+ID: p13-t0-s8 | table row -> | 2.1 Restore and Conserve the Nation’s | 2.1.1 CRP restored wetland acreage | Exceeded
+ID: p13-t0-s9 | table row -> 1.2 Create Thriving Communities 1.2.1 Number of borrowers/subscribers receiving new or improved service Exceeded
+from agency funded water facility.
+ID: p13-t0-s10 | table row -> 2.1.4 CTA: Grazing land and forest land with conservation applied to protect Met
+and improve the resource base
+ID: p13-t0-s11 | table row -> 1.2.2 Homeownership Opportunities Provided Unmet
+1.2.3 Percentage of customers who are provided access to new and/or
+improved essential community facilities.
+ID: p13-t0-s12 | table row -> EN EE EE EEE EEE EES
+1.3.4 Value of trade preserved annually through USDA staff interventions Exceeded
+leading to resolution of barriers created by Sanitary/Phytosanitary
+Se ee
+ID: p13-t0-s13 | table spanning cell -> 12
+ID: p13-t0-s14 | table row -> | Objectives Annual Performance Goals Result
+ID: p13-t0-s15 | table column -> Annual Performance Goals
+ate Prosperity So they are self sustaining, repopulating and Economi
+Number of jobs created or saved through USDA financing of
+businesses
+Number of borrowers/subscribers receiving new or improved
+telecommunication services
+Number of borrowers/subscribers receiving new or improved service
+from agency funded water facility
+Homeownership Opportunities Provided
+Percentage of customers who are provided access to new and/or
+improved essential community facilities
+Health Facilities
+© Safety Facilities
+© Educational Facilities
+Number of borrowers/subscribers receiving new and/or improved
+electric facilities
+Percentage of beginning farmers, racial and ethnic minority farmers,
+and women farmers financed by USDA.
+Maintain or increase percentage of FSA program delivery applications
+at USDA Service Centers that are Web-enabled
+Dollar value of agriculture trade preserved through trade agreement
+negotiation, monitoring, and enforcement non-SPS activities
+Value of trade preserved annually through USDA staff interventions
+leading to resolution of barriers created by Sanitary/Phytosanitary
+(SPS) or TBT measures.
+Value of FCIC risk protection coverage provided through FCIC.
+sponsored insurance
+Normalized value of FCIC risk protection coverage provided through
+FCIC sponsored insurance
+Percent of industry compliance with the Packers Stockyards Act
+and Private Working Lands are Conserved, Restored, and Made More
+ange, While Enhancing Our Water Resources
+CRP restored wetland acreage
+CTA: Cropland with conservation applied to improve soil quality
+EQIP: Cropland with conservation plans applied to improve soil quality
+CTA: Grazing land and forest land with conservation applied to protect
+and improve the resource base
+EQIP: Grazing land and forest land with conservation plans applied to
+protect and improve the resource base
+FRPP: Prime, unique, or important farmland protected from conversion
+to nonagricultural uses by conservation easements
+ID: p13-t0-s16 | table column -> |
+114
+| 11.2
+1.24
+1.2.2
+1.2.3
+1.2.4
+13.4
+1.3.2
+1.3.3
+1.3.4
+13.5
+1.3.6
+1.3.7
+imate Chi
+241
+21.2
+21.3
+214
+21.5
+21.6
+ID: p13-t0-s17 | table column -> ally Thrivine
+Unmet
+Unmet
+Exceeded
+Unmet
+Exceeded
+Exceeded
+Exceeded
+Exceeded
+Exceeded
+Met
+Met
+Exceeded
+Exceeded
+Met
+Unmet
+—
+Exceeded
+Met
+Met
+Met
+Met
+Exceeded
+ID: p13-t0-s18 | table row -> 2.1.6 FRPP: Prime, unique, or important farmland protected from conversion Exceeded
+to nonaaricultural uses by conservation easements:
+ID: p13-t0-s19 | table column header -> | Objectives Annual Performance Goals Result
+ID: p13-t0-s20 | table row -> eA
+| 1.3.5 Value of FCIC risk protection coverage provided through FCIC Exceeded
+aera oe
+ID: p13-t0-s21 | table spanning cell -> 13
+ID: p13-t0-s22 | table column -> ategic Goal 1: Assist Rural Commun
+Enhance Rural Prosperity
+Create Thriving Communities
+‘Support a Sustainable and
+Competitive Agricultural System
+
+strategic Goal 2: Ensure Our Nationa
+
+C
+
+Restore and Conserve the Nation's
+Forests, Farms, Ranches, and
+Grasslands.
+ID: p13-t0-s23 | table row -> | 2.1.3 EQIP: Cropland with conservation plans applied to improve soil quality | Met
+ID: p13-t0-s24 | table projected row header -> Strategic Goal 1: Assist Rural Communities to Create Prosperity So they are self sustaining, repopulating and Economically Thriving
+ID: p13-t0-s25 | table row -> BOTESIS; Palins; MANGnes; and
+Grasslands | 2.1.2 CTA: Cropland with conservation applied to improve soil quality | Met
+ID: p13-t0-s26 | table spanning cell -> 24
+ID: p13-t0-s27 | table -> Objectives Annual Performance Goals | _ Result
+| Strategic Goal 1: Assist Rural Communities to Create Prosperity So they are self sustaining, repopulating and Economically Thriving |
+1.1 Enhance Rural Prosperity 1.1.1 Number of jobs created or saved through USDA financing of Unmet
+businesses
+1.1.2 Number of borrowers/subscribers receiving new or improved Unmet
+telecommunication services
+1.2 Create Thriving Communities 1.2.1 Number of borrowers/subscribers receiving new or improved service Exceeded
+from agency funded water facility
+1.2.2 Homeownership Opportunities Provided Unmet
+1.2.3 Percentage of customers who are provided access to new and/or
+improved essential community facilities
+Health Facilities Exceeded
+© Safety Facilities Exceeded
+© Educational Facilities Exceeded
+1.2.4 Number of borrowers/subscribers receiving new and/or improved Exceeded
+electric facilities
+1.3 Support a Sustainable and 1.3.1 Percentage of beginning farmers, racial and ethnic minority farmers, Exceeded
+Competitive Agricultural System and women farmers financed by USDA.
+1.3.2 Maintain or increase percentage of FSA program delivery applications Met
+at USDA Service Centers that are Web-enabled
+1.3.3 Dollar value of agriculture trade preserved through trade agreement Met
+negotiation, monitoring, and enforcement non-SPS activities
+1.3.4 Value of trade preserved annually through USDA staff interventions Exceeded
+leading to resolution of barriers created by Sanitary/Phytosanitary
+(SPS) or TBT measures.
+1.3.5 Value of FCIC risk protection coverage provided through FCIC Exceeded
+sponsored insurance
+1.3.6 Normalized value of FCIC risk protection coverage provided through Met
+FCIC sponsored insurance
+1.3.7 Percent of industry compliance with the Packers Stockyards Act Unmet
+Strategic Goal/2: Ensure Our National Forests and Private Working Lands are Conserved, Restored, and Made More Resilient to
+Climate Change, While Enhancing Our Water Resources
+2.1 Restore and Conserve the Nation's 2.1.1 CRP restored wetland acreage Exceeded
+Forests, Farms, Ranches, and .
+Grasslands 2.1.2 CTA: Cropland with conservation applied to improve soil quality Met
+2.1.3 EQIP: Cropland with conservation plans applied to improve soil quality Met
+2.1.4 CTA: Grazing land and forest land with conservation applied to protect Met
+and improve the resource base
+2.1.5 EQIP: Grazing land and forest land with conservation plans applied to Met
+protect and improve the resource base
+2.1.6 FRPP: Prime, unique, or important farmland protected from conversion Exceeded
+to nonaaricultural uses by conservation easements

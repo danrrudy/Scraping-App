@@ -1,0 +1,191 @@
+ID: p14-t0-s0 | table row -> } Strategic Goal 3: Support Increased Economic Opportunities and Improved Quality of Life in Rural America
+ID: p14-t0-s1 | table row -> | | 3.2.4 Customers served by new or improved electric facilities | Exceeded
+ID: p14-t0-s2 | table row -> 1.2 | Support International Economic 1.2.4 Number of mothers, infants and schoolchildren receiving daily Exceeded
+Development and Trade Capacity Building meals and take-home rations under McGovern-Dole
+ID: p14-t0-s3 | table row -> | | 2.3.4 Reduce average processing time for direct loans | Exceeded
+ID: p14-t0-s4 | table row -> | | 2.3.5 Reduce average processing time for guaranteed loans Exceeded
+ID: p14-t0-s5 | table row -> 1.3. | Improved Sanitary and Phytosanitary (SPS) | 1.3.1 Increase the dollar value of trade expanded through negotiation or | Exceeded
+System to Facilitate Agricultural Trade preserved through USDA staff intervention and trade agreement
+monitoring activities (Sanitary and Phytosanitary) ($ in millions)
+ID: p14-t0-s6 | table spanning cell -> 
+ID: p14-t0-s7 | table row -> 1.1 | Expand and Maintain International Export | 1.1.1 Dollar value of agricultural trade expanded through trade Unmet
+Opportunities agreement negotiation, monitoring, and enforcement (Non-Sanitary
+and Phytosanitary)
+ID: p14-t0-s8 | table row -> Strategic Goal 1: Enhance International Competitiveness of American Agriculture
+ID: p14-t0-s9 | table row -> 1.2.2 Number of recipient countries that make substantive improvements Met
+in national trade policy and regulatory frameworks that increase
+market access
+ID: p14-t0-s10 | table column -> 14
+12
+13
+24
+22
+23
+Str
+34
+32
+ID: p14-t0-s11 | table row -> 3.1] Expand Economic Opportunities by Using | 3.1.1 Jobs Created or Saved Exceeded
+USDA Financial Resources to Leverage
+Private Sector Resources and Create
+Opportunities for Growth
+ID: p14-t0-s12 | table row -> 2.1 __| Expand Domestic Market Opportunities 2.1.1 Number of items designated as biobased for Federal procurement Met
+ID: p14-t0-s13 | table row -> | | | 3.2.3 Customers served by new or improved community facilities | Exceeded
+ID: p14-t0-s14 | table row -> 2.2 | Increase the Efficiency of Domestic 2.2.1 Agricultural Statistics Board reports released on time Met
+Agricultural Production and Marketing
+Systems
+ID: p14-t0-s15 | table spanning cell -> 
+ID: p14-t0-s16 | table row -> | Objectives | Annual Performance Goals | Result
+ID: p14-t0-s17 | table column -> Annual Performance Goals
+ational Competitiveness of American Agriculture
+Dollar value of agricultural trade expanded through trade
+agreement negotiation, monitoring, and enforcement (Non-Sanitary
+and Phytosanitary)
+Number of mothers, infants and schoolchildren receiving daily
+meals and take-home rations under McGovern-Dole
+Number of recipient countries that make substantive improvements
+in national trade policy and regulatory frameworks that increase
+market access
+Increase the dollar value of trade expanded through negotiation or
+preserved through USDA staff intervention and trade agreement
+monitoring activities (Sanitary and Phytosanitary) ($ in millions)
+veness and Sustainability of Rural and Farm Econo
+Number of items designated as biobased for Federal procurement
+Agricultural Statistics Board reports released on time
+Increase the value of Federal Crop Insurance Corporation (FCIC)
+risk protection coverage provided through FCIC-sponsored
+insurance ($ in billions)
+Increase percentage of program benefits delivered through a Web
+environment
+Increase percent of loans to beginning farmers, racial and ethnic.
+minorities, and women farmers financed
+Reduce average processing time for direct loans
+Reduce average processing time for guaranteed loans
+> Opportunities and Improved Quality of Life in Rural
+Jobs Created or Saved
+Homeownership opportunities provided
+Customers served by new or improved water and waste disposal
+facilities
+Customers served by new or improved community facilities
+Customers served by new or improved electric facilities,
+‘Customers served by new or improved telecommunications
+facilities
+ID: p14-t0-s18 | table projected row header -> Strategic Goal 3: Support Increased Economic Opportunities and Improved Quality of Life in Rural America
+ID: p14-t0-s19 | table column -> Intern:
+144
+12.4
+1.2.2
+134
+
+npetiti
+244
+2.21
+23.4
+2.3.2
+233
+234
+2.3.5
+
+onomi
+3.1.1
+3.24
+3.2.2
+3.23
+3.24
+3.25
+ID: p14-t0-s20 | table column -> Unmet
+Exceeded
+Met
+Exceeded
+ies
+Met
+Met
+Exceeded
+Met
+Exceeded
+Exceeded
+Exceeded
+America
+Exceeded
+Unmet
+Exceeded
+Exceeded
+Exceeded
+Exceeded
+ID: p14-t0-s21 | table row -> | | 3.2.5 Customers served by new or improved telecommunications Exceeded
+facilities
+ID: p14-t0-s22 | table row -> Strategic Goal 2: Enhance the Competitiveness and Sustainability of Rural and Farm Economies
+ID: p14-t0-s23 | table row -> 2.3.3 Increase percent of loans to beginning farmers, racial and ethnic Exceeded
+minorities, and women farmers financed
+ID: p14-t0-s24 | table row -> 2.3.2 Increase percentage of program benefits delivered through a Web Met
+environment
+ID: p14-t0-s25 | table spanning cell -> :
+ID: p14-t0-s26 | table column -> Objectives
+Strategic Goal 1: Enhance
+Expand and Maintain International Export
+Opportunities
+Support International Economic
+Development and Trade Capacity Building
+Improved Sanitary and Phytosanitary (SPS)
+System to Facilitate Agricultural Trade
+Strategic Goal 2: Enhance the Co
+Expand Domestic Market Opportunities
+Increase the Efficiency of Domestic
+Agricultural Production and Marketing
+Systems
+Provide Risk Management and Financial
+Tools to Farmers and Ranchers
+ategic Goal 3: Support Increased Ec
+Expand Economic Opportunities by Using
+USDA Financial Resources to Leverage
+Private Sector Resources and Create
+Opportunities for Growth
+Improve the Quality of Life Through USDA
+Financing of Quality Housing, Modern
+Utilities, and Needed Community Facilities
+ID: p14-t0-s27 | table row -> punalnichng ich Qua ltyihousing Woden as 3.2.2 Customers served by new or improved water and waste disposal Exceeded
+Utilities, and Needed Community Facilities facilities
+ID: p14-t0-s28 | table column header -> i Objectives | Annual Performance Goals | Result
+ID: p14-t0-s29 | table row -> 2.3 | Provide Risk Management and Financial 2.3.1 Increase the value of Federal Crop Insurance Corporation (FCIC) Exceeded
+Tools to Farmers and Ranchers risk protection coverage provided through FCIC-sponsored
+insurance ($ in billions)
+ID: p14-t0-s30 | table row -> 3.2 | Improve the Quality of Life Through USDA | 3.2.1 Homeownership opportunities provided Unmet
+ID: p14-t0-s31 | table spanning cell -> :
+ID: p14-t0-s32 | table -> Objectives Annual Performance Goals Result
+Strategic Goal 1: Enhance International Competitiveness of American Agriculture
+1.4] Expand and Maintain International Export | 1.1.1 Dollar value of agricultural trade expanded through trade Unmet
+Opportunities agreement negotiation, monitoring, and enforcement (Non-Sanitary
+and Phytosanitary)
+1.2 | Support International Economic 1.2.1 Number of mothers, infants and schoolchildren receiving daily Exceeded
+Development and Trade Capacity Building meals and take-home rations under McGovern-Dole
+1.2.2 Number of recipient countries that make substantive improvements Met
+in national trade policy and regulatory frameworks that increase
+market access
+1.3 | Improved Sanitary and Phytosanitary (SPS) | 1.3.1 _ Increase the dollar value of trade expanded through negotiation or | Exceeded
+System to Facilitate Agricultural Trade preserved through USDA staff intervention and trade agreement
+monitoring activities (Sanitary and Phytosanitary) ($ in millions)
+Strategic Goal 2: Enhance the Competitiveness and Sustainability of Rural and Farm Economies
+Expand Domestic Market Opportunities 2.1.4 Number of items designated as biobased for Federal procurement Met
+2.2 | Increase the Efficiency of Domestic 2.2.1 Agricultural Statistics Board reports released on time Met
+Agricultural Production and Marketing
+Systems
+2.3. | Provide Risk Management and Financial 2.3.1 __ Increase the value of Federal Crop Insurance Corporation (FCIC) Exceeded
+Tools to Farmers and Ranchers risk protection coverage provided through FCIC-sponsored
+insurance ($ in billions)
+2.3.2 _ Increase percentage of program benefits delivered through a Web Met
+environment
+2.3.3 Increase percent of loans to beginning farmers, racial and ethnic. Exceeded
+minorities, and women farmers financed
+2.3.4 Reduce average processing time for direct loans Exceeded
+2.3.5 _ Reduce average processing time for guaranteed loans Exceeded
+Strategic Goal 3: Support Increased Economic Opportunities and Improved Quality of Life in Rural America
+3.1 | Expand Economic Opportunities by Using | 3.1.1 Jobs Created or Saved Exceeded
+USDA Financial Resources to Leverage
+Private Sector Resources and Create
+Opportunities for Growth
+3.2 | Improve the Quality of Life Through USDA | 3.2.1 Homeownership opportunities provided Unmet
+Financing of Quality Housing, Modern i
+Uuliies onal Needed Communityragiiies | 222 Guam served by new or improved water and waste disposal Exceeded
+3.2.3 Customers served by new or improved community facilities Exceeded
+3.2.4 Customers served by new or improved electric facilities Exceeded
+3.2.5 Customers served by new or improved telecommunications Exceeded
+facilities

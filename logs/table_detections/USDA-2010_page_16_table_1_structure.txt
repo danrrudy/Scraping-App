@@ -1,0 +1,205 @@
+ID: p16-t0-s0 | table row -> | | 1.3.7 Percent of industry compliance with the Packers Stockyards Act | Unmet
+ID: p16-t0-s1 | table row -> 2.1.3 Envirionmental Quality Incentive Program (EQIP): Cropland with Met
+conservation applied to improve soil quality (millions of acres)
+ID: p16-t0-s2 | table row -> 1.2 Create Thriving Communities | 1.2.1 Number of borrowers/subscribers receiving new or improved service from | Exceeded
+agency funded water facility
+ID: p16-t0-s3 | table row -> 1.3.5 Normalized value of FCIC risk protection coverage provided through FCIC Met
+sponsored insurance (¢ billions)
+ID: p16-t0-s4 | table row -> 1.3.6 The number of farmers and ranchers that gained an economic, Met
+environmental or quality-of-life benefit from a change in practice learned by
+participating in a Sustainable Agricultural Research and Education (SARE)
+project.
+ID: p16-t0-s5 | table row -> Safety Facilities Exceeded
+1.2.4 Number of borrowers/subscribers receiving new and/or improved electric Exceeded
+ID: p16-t0-s6 | table row -> 1.1. Enhance Rural Prosperity 1.1.1. Number of jobs created or saved through USDA financing of businesses Exceeded
+1.1.2 Number of borrowers/subscribers receiving new or improved Met
+telecommunication services (millions)
+ID: p16-t0-s7 | table row -> Strateaic Goal 1: Assist Rural Communities to Create Prosperity So they are self sustaining. repopulating and Economically Thriving
+ID: p16-t0-s8 | table row -> 1.2.2 Homeownership Opportunities Provided
+© Guaranteed Loans Exceeded
+Direct Loans Exceeded
+© Total
+
+1.2.3 Percentage of customers who are provided access to new and/or improved
+Fe Te
+ID: p16-t0-s9 | table column -> 11
+1.2
+1.3
+cL
+24
+ID: p16-t0-s10 | table row -> 1.3.8 Maintain or increase percentage of program benefits delivered through a Deferred
+Web environment
+ID: p16-t0-s11 | table row -> Grasslands: 2.1.2 Conservation Technical Assistance (CTA): Cropland with conservation Met
+applied to improve soil quality (millions of acres)
+ID: p16-t0-s12 | table spanning cell -> To
+Support a Sustainable and Competitive |
+Agricultural System
+
+i
+i
+i
+i
+i
+i
+i
+trategic Goal 2: Ensure Our National Fores
+ID: p16-t0-s13 | table spanning cell -> 12
+ID: p16-t0-s14 | table row -> | Objectives | Annual Performance Goals | Result
+ID: p16-t0-s15 | table column -> Annual Performance Goals
+pate Prosperity So they are self sustaining, repopulating and Economicall
+Number of jobs created or saved through USDA financing of businesses
+Number of borrowers/subscribers receiving new or improved
+telecommunication services (millions)
+Number of borrowers/subscribers receiving new or improved service from
+agency funded water facility
+Homeownership Opportunities Provided
+© Guaranteed Loans
+Direct Loans
+© Total
+Percentage of customers who are provided access to new and/or improved
+essential community facilities
+Health Facilities
+Safety Facilities
+Number of borrowers/subscribers receiving new and/or improved electric
+Percentage of beginning farmers, racial and ethnic minority farmers, and
+women farmers financed by USDA
+Dollar value of agriculture trade preserved through trade agreement
+negotiation, monitoring, and enforcement ($ billions) Non-
+Sanitary/Phytosanitary (SPS) Activities
+Value of trade preserved annually through USDA staff interventions leading
+to resolution of barriers created by SPS or Technical Barrier to Trade (TBT)
+actions
+Value of Federal Crop Insurance Corporation (FCIC) risk protection
+coverage provided through FCIC sponsored insurance ($ billions)
+Normalized value of FCIC risk protection coverage provided through FCIC
+sponsored insurance (§ billions)
+The number of farmers and ranchers that gained an economic,
+environmental or quality-of-life benefit from a change in practice learned by
+participating in a Sustainable Agricultural Research and Education (SARE)
+project.
+Percent of industry compliance with the Packers Stockyards Act
+Maintain or increase percentage of program benefits delivered through a
+Web environment
+Private Working Lands are Conserved, Restored, and Made More Resilie1
+2, While Enhancing Our Water Resources
+Conservation Reserve Program (CRP): Restored wetland acreage (millions
+of acres)
+Conservation Technical Assistance (CTA): Cropland with conservation
+applied to improve soil quality (millions of acres)
+Envirionmental Quality Incentive Program (EQIP): Cropland with
+conservation applied to improve soil quality (millions of acres)
+CTA: Grazingland and forest land with conservation applied to protect and
+improve the resource base (millions of acres)
+ID: p16-t0-s16 | table column -> ‘Lika
+1.1.2
+1.24
+1.2.2
+1.2.3
+1.2.4
+1.3.1
+1.3.2
+1.3.3
+1.3.4
+1.3.5
+1.3.6
+1.3.7
+1.3.8
+Bill
+21.2
+21.3
+214
+ID: p16-t0-s17 | table column -> Result
+y Thriving
+Exceeded
+Met
+Exceeded
+Exceeded
+Exceeded
+Exceeded
+Exceeded
+Exceeded
+Exceeded
+Exceeded
+Exceeded
+Met
+Met
+Met
+Unmet
+Deferred
+Exceeded
+Met
+Met
+Exceeded
+ID: p16-t0-s18 | table row -> 2.1.4 CTA: Grazingland and forest land with conservation applied to protect and Exceeded
+improve the resource base (millions of acres)
+ID: p16-t0-s19 | table column header -> Objectives | Annual Performance Goals | Result
+ID: p16-t0-s20 | table row -> 1.3 Support a Sustainable and Competitive | 1.3.1 Percentage of beginning farmers, racial and ethnic minority farmers, and Exceeded
+Agricultural System women farmers financed by USDA
+ID: p16-t0-s21 | table row -> 1.3.4 Value of Federal Crop Insurance Corporation (FCIC) risk protection Met
+coverage provided through FCIC sponsored insurance ($ billions)
+ID: p16-t0-s22 | table spanning cell -> |
+ID: p16-t0-s23 | table column -> Objectives
+
+Strategic Goal 1: Assist Rural Communit
+Enhance Rural Prosperity
+Create Thriving Communities
+Support a Sustainable and Competitive
+Agricultural System
+
+rategic Goal 2: Ensure Our National For
+Restore and Conserve the Nation's
+Forests, Farms, Ranches, and
+Grasslands
+ID: p16-t0-s24 | table row -> 2.1 Restore and Conserve the Nation's 2.1.1 Conservation Reserve Program (CRP): Restored wetland acreage (millions Exceeded
+Forests, Farms, Ranches, and of acres)
+ID: p16-t0-s25 | table row -> Tv.c  Dollaf value of agriculture trade preserved tnrougn trace agreement exceeded
+negotiation, monitoring, and enforcement ($ billions) Non-
+Sanitary/Phytosanitary (SPS) Activities
+ID: p16-t0-s26 | table row -> Strategic Goal 2: Ensure Our National Forests and Private Working Lands are Conserved, Restored, and Made More Resilient to Climate
+Change, While Enhancing Our Water Resources
+ID: p16-t0-s27 | table spanning cell -> L
+ID: p16-t0-s28 | table -> Objectives Annual Performance Goals Result
+Strategic Goal 1: Assist Rural Communities to Create Prosperity So they are self sustaining, repopulating and Economically Thriving
+1.1. Enhance Rural Prosperity 1.1.1. Number of jobs created or saved through USDA financing of businesses Exceeded
+1.1.2 Number of borrowers/subscribers receiving new or improved Met
+telecommunication services (millions)
+1.2 Create Thriving Communities 1.2.1 Number of borrowers/subscribers receiving new or improved service from Exceeded
+agency funded water facility
+1.2.2 Homeownership Opportunities Provided
+© Guaranteed Loans Exceeded
+Direct Loans Exceeded
+© Total
+1.2.3 Percentage of customers who are provided access to new and/or improved
+essential community facilities
+Health Facilities Exceeded
+Safety Facilities Exceeded
+1.2.4 Number of borrowers/subscribers receiving new and/or improved electric Exceeded
+1.3 Support a Sustainable and Competitive | 1.3.1 Percentage of beginning farmers, racial and ethnic minority farmers, and Exceeded
+Agricultural System women farmers financed by USDA
+1.3.2 Dollar value of agriculture trade preserved through trade agreement Exceeded
+negotiation, monitoring, and enforcement ($ billions) Non-
+Sanitary/Phytosanitary (SPS) Activities
+1.3.3 Value of trade preserved annually through USDA staff interventions leading Exceeded
+to resolution of barriers created by SPS or Technical Barrier to Trade (TBT)
+actions
+1.3.4 Value of Federal Crop Insurance Corporation (FCIC) risk protection Met
+coverage provided through FCIC sponsored insurance ($ billions)
+1.3.5 Normalized value of FCIC risk protection coverage provided through FCIC Met
+sponsored insurance ($ billions)
+1.3.6 The number of farmers and ranchers that gained an economic, Met
+environmental or quality-of-life benefit from a change in practice learned by
+participating in a Sustainable Agricultural Research and Education (SARE)
+project.
+1.3.7 Percent of industry compliance with the Packers Stockyards Act Unmet
+1.3.8 Maintain or increase percentage of program benefits delivered through a Deferred
+Web environment
+Strategic Goal 2: Ensure Our National Forests and Private Working Lands are Conserved, Restored, and Made More Resilient to Climate
+Change, While Enhancing Our Water Resources
+2.1 Restore and Conserve the Nation's 2.1.1 Conservation Reserve Program (CRP): Restored wetland acreage (millions Exceeded
+Forests, Farms, Ranches, and of acres)
+Grasslands 2.1.2 Conservation Technical Assistance (CTA): Cropland with conservation Met
+applied to improve soil quality (millions of acres)
+2.1.3 Envirionmental Quality Incentive Program (EQIP): Cropland with Met
+conservation applied to improve soil quality (millions of acres)
+2.1.4 CTA: Grazingland and forest land with conservation applied to protect and Exceeded
+improve the resource base (millions of acres)

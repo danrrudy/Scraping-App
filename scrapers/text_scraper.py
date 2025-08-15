@@ -17,3 +17,6 @@ class TextScraper(BaseScraper):
             "status": status,
             "method": "TextScraper"
         }
+
+
+

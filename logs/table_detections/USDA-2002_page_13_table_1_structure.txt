@@ -1,0 +1,211 @@
+ID: p13-t0-s0 | table row -> Promotion | + Improve access to fruits and vegetables | Met
+ID: p13-t0-s1 | table row -> + Protect water and air quality against the risk of impairment as a result of Met
+agricultural production
+ID: p13-t0-s2 | table row -> Avveutture + Increase U.S. food aid exports under Public Law (P.L.) 480, Title | and Unmet
+I Food for Progress in supporting world food security
+ID: p13-t0-s3 | table row -> 1.5 Improve the Nation's + Expand program access and benefit delivery for USDA nutrition Met
+Nutrition and Health assistance programs
+ID: p13-t0-s4 | table spanning cell -> 1.5
+ID: p13-t0-s5 | table row -> Assistance end + Promote better diet quality among children and caregivers eligible for Exceeded
+Assistance and Federal nutrition assistance programs
+ID: p13-t0-s6 | table row -> 1.1. Expand Market . Increase U.S. agricultural trade Met
+ID: p13-t0-s7 | table row -> Key Outcomes* Annual Performance Goals Result
+ID: p13-t0-s8 | table row -> . Promote research, training and technical assistance activities that Met
+support sustainable food supplies worldwide
+ID: p13-t0-s9 | table column -> 1.1
+1.2
+1.4
+1.5
+1.6
+ID: p13-t0-s10 | table row -> 1.2 Provide Risk Manage- + Producers have economically sound risk management tools available, Met
+ment and Credit/Finan- and they use them to meet their needs
+ID: p13-t0-s11 | table row -> | + Individuals using the Healthy Eating Index to assess and improve their | Exceeded
+diet
+ID: p13-t0-s12 | table row -> ort den Restle is | + Improve the standard of living in rural communities | Unmet
+Production Aariculture..
+ID: p13-t0-s13 | table row -> + Treat wildlands with high fire risks on National Forests and Grasslands Unmet
+to reduce the risk of loss of life, property, and natural resources from
+catastrophic wildfire
+ID: p13-t0-s14 | table spanning cell -> Provide Sensible Man-
+agement of Our Natural
+Resources
+ID: p13-t0-s15 | table row -> and Improve Quality of + Maintain the percentage of small farms in relation to total U.S. farms at Met
+Life in Rural Areas the 1999 level
+ID: p13-t0-s16 | table row -> | + Increase the efficiency of U.S. grain marketing | Met
+ID: p13-t0-s17 | table row -> Performance Scorecard for FY 2002
+ID: p13-t0-s18 | table column -> Performance Scorecard for FY 2002
+Annual Performance Goals
+
++ Increase U.S. agricultural trade
+
++ Increase U.S. food aid exports under Public Law (P.L.) 480, Title | and
+Food for Progress in supporting world food security
+
+. Promote research, training and technical assistance activities that
+support sustainable food supplies worldwide
+
++ Increase the efficiency of U.S. grain marketing
+
++ Producers have economically sound risk management tools available,
+and they use them to meet their needs
+
++ Improve the standard of living in rural communities
+
++ Maintain the percentage of small farms in relation to total U.S. farms at
+the 1999 level
+
++ Increase the amount of farm operating and ownership loans made or
+guaranteed to beginning and socially disadvantaged farmers
+
++ Reduce the number and severity of pest and disease outbreaks in the
+us.
+
++ Maintain a coordinated food safety risk analysis system to ensure the
+safety of U.S. meat, poultry, and egg products from farm to table
+
++ People reached with food safety information through media stories,
+circulation reports, incoming website visits, and incoming hotline calls
+
++ Expand program access and benefit delivery for USDA nutrition
+assistance programs
+
++ Promote better diet quality among children and caregivers eligible for
+Federal nutrition assistance programs
+
++ Improve access to fruits and vegetables
+
++ Individuals using the Healthy Eating Index to assess and improve their
+diet
+
++ Copies of the 2000 Dietary Guidelines disseminated to help individuals
+improve their diet
+
++ Maintain the productivity and health of the Nation's non-Federal
+cropland and grazing lands
+
++ Treat wildlands with high fire risks on National Forests and Grasslands
+to reduce the risk of loss of life, property, and natural resources from
+catastrophic wildfire
+
+* Protect water and air quality against the risk of impairment as a result of
+agricultural production
+
++ Restore or improve rangeland and forestland watersheds in the National
+Forests and Grasslands
+ID: p13-t0-s19 | table column -> 
+ID: p13-t0-s20 | table column -> Result
+Met
+Unmet
+Met
+Met
+Met
+Unmet
+Met
+Met
+~ Deffered
+Met
+Met
+Met
+Exceeded
+Met
+Exceeded
+Met
+Met
+Unmet
+Met
+Unmet
+ID: p13-t0-s21 | table row -> + Restore or improve rangeland and forestland watersheds in the National | _ Unmet
+Forests and Grasslands
+ID: p13-t0-s22 | table column header -> Performance Scorecard for FY 2002
+Key Outcomes* Annual Performance Goals Result
+ID: p13-t0-s23 | table row -> Nani aghiGum ane 7 oe oe
+Food Supply + People reached with food safety information through media stories, Met
+circulation reports, incoming website visits, and incoming hotline calls
+ID: p13-t0-s24 | table row -> Information and tech: | + Maintain a coordinated food safety risk analysis system to ensure the | Met
+nology to Protect the safety of U.S. meat. poultry, and eaq products from farm to table
+ID: p13-t0-s25 | table column -> Key Outcomes*
+Expand Market
+Opportunities for U.S.
+Agriculture
+Provide Risk Manage-
+ment and Credit/Finan-
+cing Tools to Support
+Production Agriculture,
+and Improve Quality of
+Life in Rural Areas
+Continue to Use the Best
+Available Science,
+Information and Tech-
+nology to Protect the
+Nation's Agriculture and
+Food Supply
+Improve the Nation's
+Nutrition and Health
+through Food
+Assistance and
+Nutrition Education and
+Promotion
+Provide Sensible Man-
+agement of Our Natural
+Resources
+ID: p13-t0-s26 | table row -> 1.6 Provide Sensible Man- | + Maintain the productivity and health of the Nation's non-Federal Met
+agement of Our Natural cropland and grazing lands
+Resources
+ID: p13-t0-s27 | table spanning cell -> 4.1
+ID: p13-t0-s28 | table spanning cell -> Provide Risk Manage-
+ment and Credit/Finan-
+cing Tools to Support
+Production Agriculture,
+and Improve Quality of
+Life in Rural Areas
+ID: p13-t0-s29 | table spanning cell -> Performance Scorecard for FY 2002
+ID: p13-t0-s30 | table spanning cell -> 1.4
+ID: p13-t0-s31 | table spanning cell -> 41.2
+ID: p13-t0-s32 | table row -> + Increase the amount of farm operating and ownership loans made or Met
+guaranteed to beginning and socially disadvantaged farmers
+ID: p13-t0-s33 | table row -> + Copies of the 2000 Dietary Guidelines disseminated to help individuals Met
+improve their diet
+ID: p13-t0-s34 | table spanning cell -> 1.6
+ID: p13-t0-s35 | table -> Performance Scorecard for FY 2002
+Key Outcomes* Annual Performance Goals Result
+14 Expand Market + Increase U.S. agricultural trade Met
+Opportunities for U.S. + Increase U.S. food aid exports under Public Law (P.L.) 480, Title | and Unmet
+I Food for Progress in supporting world food security
+. Promote research, training and technical assistance activities that Met
+support sustainable food supplies worldwide
++ Increase the efficiency of U.S. grain marketing Met
+1.2 Provide RiskManage- | + Producers have economically sound risk management tools available, Met
+ment and Credi/Finan- and they use them to meet their needs
+cing Tools to Support + Improve the standard of living in rural communities Unmet
+Production Agriculture,
+and Improve Quality of | +» Maintain the percentage of small farms in relation to total U.S. farms at Met
+Life in Rural Areas the 1999 level
++ Increase the amount of farm operating and ownership loans made or Met
+guaranteed to beginning and socially disadvantaged farmers
+14 Continue to Use the Best]. Reduce the number and severity of pest and disease outbreaks in the Deffered
+Available Science, US.
+rant Prats tech: + Maintain a coordinated food safety risk analysis system to ensure the Met
+Nee aerieattune and safely of U.S. meat, poultry, and egg products from farm to table
+Food Supply + People reached with food safety information through media stories, Met
+circulation reports, incoming website visits, and incoming hotline calls
+1.5 _ Improve the Nation's + Expand program access and benefit delivery for USDA nutrition Met
+Nutrition and Health assistance programs
+through Food + Promote better diet quality among children and caregivers eligible for Exceeded
+Assistance and and Federal nutrition assistance programs
+Promotion . Improve access to fruits and vegetables Met
++ Individuals using the Healthy Eating Index to assess and improve their | Exceeded
+diet
++ Copies of the 2000 Dietary Guidelines disseminated to help individuals Met
+improve their diet
+1.6 Provide Sensible Man- | + Maintain the productivity and health of the Nation’s non-Federal Met
+agement of Our Natural cropland and grazing lands
+Resources
++ Treat wildlands with high fire risks on National Forests and Grasslands Unmet
+to reduce the risk of loss of life, property, and natural resources from
+catastrophic wildfire
++ Protect water and air quality against the risk of impairment as a result of Met
+agricultural production
++ Restore or improve rangeland and forestland watersheds in the National | Unmet
+Forests and Grasslands
+ID: p13-t0-s36 | table row -> 1.4 Continue to Use the Best} + Reduce the number and severity of pest and disease outbreaks in the Deffered
+Available Science, U.S.

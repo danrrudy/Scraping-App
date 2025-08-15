@@ -1,0 +1,208 @@
+ID: p13-t0-s0 | table row -> 3.1 | Expand Economic Opportunities by | 3.1.1 Number of jobs created or saved through USDA financing of Met
+Using USDA Financial Resources to businesses
+Leverage Private Sector Resources
+and Create Opnortunities for Growth
+ID: p13-t0-s1 | table row -> 3.2.5 — Number of program borrowers/subscribers receiving new or Met
+improved electric service
+ID: p13-t0-s2 | table row -> 1.2 | Support International Economic 1.2.1 Food Aid Targeting Effectiveness Ratio Met
+Development and Trade Capacity
+Building
+ID: p13-t0-s3 | table row -> 2.3.3 Increase percentage of beginning farmers, racial and ethnic Met
+minority farmers, and women farmers financed by FSA
+ID: p13-t0-s4 | table row -> Strategic Goal 3: Support Increased Economic Opportunities and Improved Quality of Life in Rural America
+ID: p13-t0-s5 | table row -> 1.3 | Improved Sanitary and Phytosanitary | 1.3.1 Value of trade preserved annually through USDA staff Exceeded
+(SPS) System to Facilitate interventions leading to resolution of barriers created by SPS
+Agricultural Trade or TBT measures (Sanitary and Phytosanitary) ($ in millions)
+ID: p13-t0-s6 | table spanning cell -> 
+ID: p13-t0-s7 | table row -> 1.1 | Expand and Maintain International =| 1.1.1 Dollar value of agricultural trade expanded through trade Unmet
+Export Opportunities agreement negotiation, monitoring, and enforcement (Non-
+Sanitary and Phytosanitary)
+ID: p13-t0-s8 | table row -> Strategic Goal 1: Enhance International Competitiveness of American Agriculture
+ID: p13-t0-s9 | table row -> 1.2.2 Number of countries in which substantive improvements are Met
+made in national trade policy and regulatory frameworks that
+increase market access
+ID: p13-t0-s10 | table column -> 14
+1.2
+13
+24
+2.2
+2.3
+3.4
+3.2
+ID: p13-t0-s11 | table row -> 3.2 | Improve the Quality of Life Through | 3.2.1 Homeownership opportunities provided Met
+ID: p13-t0-s12 | table row -> 2.11 | Expand Domestic Market 2.1.1 Increase the number of products designated under the Unmet
+Opportunities BioPreferred Program
+ID: p13-t0-s13 | table row -> 3.2.4 Percentage of customers who are provided access to new Exceeded
+and/or improved essential community public safety services
+ID: p13-t0-s14 | table row -> 2.2 | Increase the Efficiency of Domestic | 2.2.1 Timeliness — Percent of time official reports are released on the Met
+Agricultural Production and date and time pre-specified to data users
+Marketing Systems
+ID: p13-t0-s15 | table spanning cell -> 
+ID: p13-t0-s16 | table row -> || Objectives | Annual Performance Goals | Result
+ID: p13-t0-s17 | table column -> Annual Performance Goals LL
+nternational Competitiveness of American Agriculture
+Dollar value of agricultural trade expanded through trade
+agreement negotiation, monitoring, and enforcement (Non-
+Sanitary and Phytosanitary)
+Food Aid Targeting Effectiveness Ratio
+Number of countries in which substantive improvements are
+made in national trade policy and regulatory frameworks that
+increase market access
+Value of trade preserved annually through USDA staff
+interventions leading to resolution of barriers created by SPS
+or TBT measures (Sanitary and Phytosanitary) ($ in millions)
+petitiveness and Sustainability of Rural and Farm Econo
+Increase the number of products designated under the
+BioPreferred Program
+Timeliness — Percent of time official reports are released on the
+date and time pre-specified to data users
+Percent of market-identified quality attributes for which USDA
+has provided standardization (percent)
+Normalized value of FCIC risk protection coverage provided
+through FCIC sponsored insurance
+Percentage of eligible crops with NAP coverage
+Increase percentage of beginning farmers, racial and ethnic
+minority farmers, and women farmers financed by FSA
+nomic Opportunities and Improved Quality of Life in Rure
+Number of jobs created or saved through USDA financing of
+businesses
+Homeownership opportunities provided
+Number of borrowers/subscribers receiving new or improved
+service from agency funded water facility (millions)
+Percentage of customers who are provided access to new
+and/or improved essential community health facilities
+Percentage of customers who are provided access to new
+and/or improved essential community public safety services
+Number of program borrowers/subscribers receiving new or
+improved electric service
+Number of program borrowers/subscribers receiving new or
+improved telecommunications service
+ID: p13-t0-s18 | table column -> nance |
+444
+1.2.1
+1.2.2
+1.3.1
+
+1e Com
+24.41
+2.21
+2.2.2
+2.3.1
+2.3.2
+2.3.3
+
+ed Eco
+3.1.4
+3.2.1
+3.2.2
+3.2.3
+3.2.4
+3.2.5
+3.2.6
+ID: p13-t0-s19 | table spanning cell -> 
+ID: p13-t0-s20 | table column -> Unmet
+Met
+Met
+~ Exceeded
+mies
+Unmet
+Met
+Met
+Met
+Met
+Met
+il America
+Met
+Met
+Exceeded
+Exceeded
+Exceeded
+Met
+Exceeded
+ID: p13-t0-s21 | table row -> 3.2.6 Number of program borrowers/subscribers receiving new or Exceeded
+improved telecommunications service
+ID: p13-t0-s22 | table column header -> ! Objectives | Annual Performance Goals | Result
+ID: p13-t0-s23 | table row -> Strategic Goal 2: Enhance the Competitiveness and Sustainability of Rural and Farm Economies
+ID: p13-t0-s24 | table row -> | Ranchers | 2.3.2 Percentage of eligible crops with NAP coverage | Met
+ID: p13-t0-s25 | table row -> Sennen heeineieennendineeten ane aanee | hiineiemndinenanin’
+2.3 | Provide Risk Management and 2.3.1 Normalized value of FCIC risk protection coverage provided Met
+Financial Tools to Farmers and through FCIC sponsored insurance
+ID: p13-t0-s26 | table spanning cell -> 
+ID: p13-t0-s27 | table column -> Objectives
+Strategic Goal 1: En
+Expand and Maintain International
+Export Opportunities
+‘Support International Economic
+Development and Trade Capacity
+Building
+Improved Sanitary and Phytosanitary
+(SPS) System to Facilitate
+Agricultural Trade
+Strategic Goal 2: Enhance 1
+Expand Domestic Market
+Opportunities
+Increase the Efficiency of Domestic
+Agricultural Production and
+Marketing Systems
+Provide Risk Management and
+Financial Tools to Farmers and
+Ranchers
+Strategic Goal 3: Support Increas
+Expand Economic Opportunities by
+Using USDA Financial Resources to
+Leverage Private Sector Resources
+and Create Opportunities for Growth
+Improve the Quality of Life Through
+USDA Financing of Quality Housing,
+Modern Utilities, and Needed
+Community Facilities
+ID: p13-t0-s28 | table row -> IED EELS 3.2.3 Percentage of customers who are provided access to new Exceeded
+and/or improved essential community health facilities
+ID: p13-t0-s29 | table row -> 2.2.2 Percent of market-identified quality attributes for which USDA. Met
+has provided standardization (percent)
+ID: p13-t0-s30 | table row -> pk Pinaneing of ldaily mousing, | 3.2.2 Number of borrowers/subscribers receiving new or improved Exceeded
+Modern Utilities, and Needed service from agency funded water facility (millions)
+ID: p13-t0-s31 | table spanning cell -> |
+ID: p13-t0-s32 | table -> Objectives LU Annual Performance Goals LU Result
+Strategic Goal 1: Enhance International Competitiveness of American Agriculture
+1.4 | Expand and Maintain International 1.1.1 Dollar value of agricultural trade expanded through trade Unmet
+Export Opportunities agreement negotiation, monitoring, and enforcement (Non-
+Sanitary and Phytosanitary)
+1.2 | Support International Economic 1.2.1 Food Aid Targeting Effectiveness Ratio Met
+Development and Trade Capacity
+Building
+1.2.2 Number of countries in which substantive improvements are Met
+made in national trade policy and regulatory frameworks that
+increase market access
+1.3 | Improved Sanitary and Phytosanitary | 1.3.1 _ Value of trade preserved annually through USDA staff Exceeded
+(SPS) System to Facilitate interventions leading to resolution of barriers created by SPS
+Agricultural Trade or TBT measures (Sanitary and Phytosanitary) ($ in millions)
+Strategic Goal 2: Enhance the Competitiveness and Sustainability of Rural and Farm Economies
+2.1 | Expand Domestic Market 2.1.1 Increase the number of products designated under the Unmet
+Opportunities BioPreferred Program
+2.2 | Increase the Efficiency of Domestic 2.2.1 Timeliness — Percent of time official reports are released on the Met
+Agricultural Production and date and time pre-specified to data users
+Marketing Systems
+2.2.2 Percent of market-identified quality attributes for which USDA Met
+has provided standardization (percent)
+2.3 | Provide Risk Management and 2.3.1 Normalized value of FCIC risk protection coverage provided Met
+Financial Tools to Farmers and through FCIC sponsored insurance
+Ranchers 2.3.2 Percentage of eligible crops with NAP coverage Met
+2.3.3 Increase percentage of beginning farmers, racial and ethnic Met
+minority farmers, and women farmers financed by FSA
+Strategic Goal 3: Support Increased Economic Opportunities and Improved Quality of Life in Rural America
+3.1 | Expand Economic Opportunities by 3.1.1. Number of jobs created or saved through USDA financing of Met
+Using USDA Financial Resources to businesses
+Leverage Private Sector Resources
+and Create Opportunities for Growth
+3.2 | Improve the Quality of Life Through | 3.2.1 Homeownership opportunities provided Met
+USDA Financing of Quality Housing, | 3.2.2 Number of borrowers/subscribers receiving new or improved Exceeded
+Modern Utilities, and Needed service from agency funded water facility (millions)
+Community Facilities 3.2.3 Percentage of customers who are provided access to new Exceeded
+and/or improved essential community health facilities
+3.2.4 Percentage of customers who are provided access to new Exceeded
+and/or improved essential community public safety services
+3.2.5 _ Number of program borrowers/subscribers receiving new or Met
+improved electric service
+3.2.6 Number of program borrowers/subscribers receiving new or Exceeded
+improved telecommunications service

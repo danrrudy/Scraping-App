@@ -1,0 +1,281 @@
+ID: p13-t0-s0 | table row -> sion of financing to support high-speed telecommunications services
+(broadband)
+2.2 Improve the Quality | 2.2.1: Improve the quality of life in rural America Met.
+ID: p13-t0-s1 | table row -> from Foodborne 3.1.3: Enhance industry compliance with regulatory requirements (Listeria monocyto- Met
+Hazards in the genes)
+ID: p13-t0-s2 | table row -> | | 4.1.5: Increase the international animal and plant health standards adopted | Exceeded
+ID: p13-t0-s3 | table row -> 1.1 Expand Interna- 1.1.1; Estimated annual trade opportunities preserved through WTO trade negotiations | Exceeded
+tional Market and notification process
+ID: p13-t0-s4 | table row -> ne ne eg en ein eee ES DD ODEN EN NDS ODEN SSIES BARES
+Opportunities | 2.1.2: Reduce the Business and Industry Portfolio delinquency rate, excluding bank- | Exceeded
+ID: p13-t0-s5 | table row -> Through USDA fm EEE IEEE EEE
+Financing of Busi- ruptcy cases
+nesses 2.1.3: Improve the ability of small, rural towns to enjoy economic growth through provi- | Unmet
+ID: p13-t0-s6 | table projected row header -> Strategic Goal 1: Enhance Economic Opportunities for Agricultural Producers
+ID: p13-t0-s7 | table spanning cell -> :
+ID: p13-t0-s8 | table row -> Strategic Goal 1: Enhance Economic Opportunities for Agricultural Producers
+ID: p13-t0-s9 | table row -> Objectives Annual Performance Goals Result
+ID: p13-t0-s10 | table column -> Stra’
+1.4
+1.2
+1.3
+14
+Stra
+21
+2.2
+Stra
+3.1
+ID: p13-t0-s11 | table spanning cell -> 
+ID: p13-t0-s12 | table row -> | | 4.4.4: Increase the new export protocols that facilitate access to foreign markets | Exceeded
+ID: p13-t0-s13 | table row -> 2.2 Improve the Quality | 2.2.1: Improve the quality of life in rural America Met
+of Life Through
+USDA Financing of
+Quality Housing,
+Modern Utilities and
+Needed Community
+Facilities
+ID: p13-t0-s14 | table row -> Opportunities 4.1.2: Estimated gross trade value of markets expanded/retained by market access Met
+activities other than WTO notification process
+ID: p13-t0-s15 | table row -> Eco Producte i i ith regulatory requirements (Salmonella) Met
+| Eco Producte | 2-1-2: Enhance industry compliance with regulatory requi ( ) |
+ID: p13-t0-s16 | table row -> | | 4.1.3: Average tariff rate on agricultural products worldwide | Met
+ID: p13-t0-s17 | table spanning cell -> 1.2 §
+'
+{
+{
+ID: p13-t0-s18 | table row -> | Performance Scorecard for FY 2003
+ID: p13-t0-s19 | table column -> Performance Scorecard for FY 2003
+Annual Performance Goals
+
+nomic Opportunities for Agricultural Producers
+
+1: Estimated annual trade opportunities preserved through WTO trade negotiations
+and notification process
+
+|.2: Estimated gross trade value of markets expanded/retained by market access
+activities other than WTO notification process
+
+.3: Average tariff rate on agricultural products worldwide
+
+|.4: Increase the new export protocols that facilitate access to foreign markets
+
+.6: Increase the international animal and plant health standards adopted
+
+2.1: Increase the activities/projects completed in support of international economic
+development and trade capacity building in developing and transition countries
+
+2.2: Share of countries’ food-import needs met through food-aid programs
+
+2.3: Improve food security and nutrition through the McGovern-Dole Food for Educa-
+tion Program by the number of daily meals and take-home rations for mothers,
+infants and schoolchildren
+
+2.4: Improve literacy and primary education through McGovern-Dole Food for Edu-
+cation Program
+
+3.1: Increase the use of bioenergy and biobased products
+
+1.1: Expand USDA risk-management tools available for agricultural producers to use
+in managing production and price risks
+
+1.2: Improve customer service by increasing the efficiency of loan processing
+
+13: Improve fiscal soundness of the direct-loan portfolio
+
+14: Eligible commodity production placed under marketing assistance loan or loan
+deficiency payment
+
+5: Increase farm commodity and loan programs that can be accessed, completed
+and accepted electronically
+
+ased Economic Opportunities and Improved Quality of Life in Rural America
+
+1: Create or save additional jobs through USDA financing of businesses
+
+|.2: Reduce the Business and Industry Portfolio delinquency rate, excluding bank-
+tuptcy cases
+
+3: Improve the ability of small, rural towns to enjoy economic growth through provi-
+sion of financing to support high-speed telecommunications services
+(broadband)
+
+2.1: Improve the quality of life in rural America
+
+tection and Safety of the Nation's Agriculture and Food Supply
+
+1: Conduct risk assessments of microbial, chemical and physical hazards to meat,
+poultry and egg products
+
+.2: Enhance industry compliance with regulatory requirements (Salmonella)
+
+|.3: Enhance industry compliance with regulatory requirements (Listeria monocyto-
+genes)
+
+1.4: Develop new systems for detecting foodborne hazards
+ID: p13-t0-s20 | table column -> Econor
+4114:
+41.1.2:
+41.1.3:
+41.1.4:
+1.1.5:
+41.2.1:
+1.2.2:
+1.2.3:
+1.2.4:
+1.3.1:
+1.4.1:
+1.4.2:
+1.4.3:
+1.4.4:
+1.4.5:
+
+ncrease
+2.44:
+2.1.2:
+2.1.3:
+2.2.1:
+
+» Protec
+3.1.1:
+3.1.2:
+3.1.3:
+3.1.4:
+ID: p13-t0-s21 | table column -> Result
+Exceeded
+Met
+Met
+Exceeded
+Exceeded
+Met
+Met
+Met
+Met
+Met
+Deferred
+Met
+Met
+Unmet!
+Exceeded
+Exceeded
+Exceeded
+Unmet
+Met
+Met
+Met
+Met
+Exceeded
+ID: p13-t0-s22 | table row -> Strategic Goal 2: Support Increased Economic Opportunities and Improved Quality of Life in Rural America
+ID: p13-t0-s23 | table row -> 1.2.4: Improve literacy and primary education through McGovern-Dole Food for Edu- Met
+cation Program
+ID: p13-t0-s24 | table row -> | Be | 3.1.4: Develop new systems for detecting foodborne hazards | Exceeded
+ID: p13-t0-s25 | table column header -> Performance Scorecard for FY 2003
+Objectives Annual Performance Goals Result
+ID: p13-t0-s26 | table projected row header -> Strategic Goal 3: Enhance Protection and Safety of the Nation's Agriculture and Food Supply
+ID: p13-t0-s27 | table row -> eee eee eee eee eee eee ee eee ieee aes eee oe
+Oa Benand Eomnein Dad) Aenate ap enn odditanalinhe thenah JERA Rnaonwinn af hwinnoene Honnedad
+ID: p13-t0-s28 | table column -> Objectives
+egic Goal 1: Enhance
+Expand Interna-
+tional Market
+Opportunities
+Support Interna-
+tional Economic
+Development and
+Trade Capacity
+Building
+Develop Alterna-
+tive Markets for
+Agricultural Prod-
+ucts and Activities
+Provide Risk-
+Management
+Financial Tools to
+Farmers and
+Ranchers
+egic Goal 2: Support|
+Expand Economic
+Opportunities
+Through USDA
+Financing of Busi-
+nesses
+Improve the Quality
+of Life Through
+USDA Financing of
+Quality Housing,
+Modern Utilities and
+Needed Community
+Facilities
+egic Goal 3: Enhanc
+Enhance the
+Protection of
+Meat, Poultry and
+Egg Products
+from Foodborne
+Hazards in the
+us.
+ID: p13-t0-s29 | table row -> 3.1 Enhance the 3.1.1: Conduct risk assessments of microbial, chemical and physical hazards to meat, Met
+Protection of poultry and egg products
+ID: p13-t0-s30 | table spanning cell -> 
+ID: p13-t0-s31 | table row -> 1.2. Support Interna- 1.2.1: Increase the activities/projects completed in support of international economic Met
+tional Economic development and trade capacity building in developing and transition countries
+ID: p13-t0-s32 | table row -> 1.3 Develop Alterna- | 1.3.1: Increase the use of bioenergy and biobased products Met
+tive Markets for
+Agricultural Prod-
+ucts and Activities
+ID: p13-t0-s33 | table row -> Strategic Goal 3: Enhance Protection and Safety of the Nation's Agriculture and Food Supply
+ID: p13-t0-s34 | table spanning cell -> 3.4
+ID: p13-t0-s35 | table -> Performance Scorecard for FY 2003
+Objectives Annual Performance Goals Result
+Strategic Goal 1: Enhance Economic Opportunities for Agricultural Producers
+1.1 ExpandInterna- | 1.1.4: Estimated annual trade opportunities preserved through WTO trade negotiations | Exceeded
+tional Market and notification process
+Opportunities 1.1.2: Estimated gross trade value of markets expanded/retained by market access Met
+activities other than WTO notification process
+4.1.3: Average tariff rate on agricultural products worldwide Met
+1.1.4: Increase the new export protocols that facilitate access to foreign markets Exceeded
+1.4.8: Increase the international animal and plant health standards adopted Exceeded
+4.2 Support intema- | 1.2.1: Increase the activities/projects completed in support of international economic Met
+tional Economic development and trade capacity building in developing and transition countries
+Development and | 4.2.2: Share of countries’ food-import needs met through food-aid programs Met
+Trade Capacity
+Building 1.2.3: Improve food security and nutrition through the McGovern-Dole Food for Educa- | Met
+tion Program by the number of daily meals and take-home rations for mothers,
+infants and schoolchildren
+1.2.4: Improve literacy and primary education through McGovern-Dole Food for Edu- Met
+cation Program
+1.3 Develop Alterna. | 1.3.1: Increase the use of bioenergy and biobased products Met
+tive Markets for
+Agricultural Prod-
+ucts and Activities
+1.4 Provide Risk- 1.44; Expand USDA risk-management tools available for agricultural producers to use | Deferred
+Management in managing production and price risks
+Financial Tools to oe _ .
+ppancial Tor 1.4.2: Improve customer service by increasing the efficiency of loan processing Met
+Ranchers 1.4.3: Improve fiscal soundness of the direct-loan portfolio Met
+1.4.4: Eligible commodity production placed under marketing assistance loan orloan | Unmet’
+deficiency payment
+1.4.5: Increase farm commodity and loan programs that can be accessed, completed | Exceeded
+and accepted electronically
+Strategic Goal 2: Support Increased Economic Opportunities and Improved Quality of Life in Rural America
+24 Expand Economic | 2.1.1: Greate or save additional jobs through USDA financing of businesses Exceeded
+Goportuntties A 2.1.2: Reduce the Business and Industry Portfolio delinquency rate, excluding bank- | Exceeded
+gt ruptcy cases
+Financing of Busi-
+nesses 2.1.3: Improve the ability of small, rural towns to enjoy economic growth through provi | Unmet
+sion of financing to support high-speed telecommunications services
+(broadband)
+2.2 Improve the Quality | 2.2.1: Improve the quality of life in rural America Met
+of Life Through
+USDA Financing of
+Quality Housing,
+Modern Utilities and
+Needed Community
+Facilities
+Strategic Goal 3: Enhance Protection and Safety of the Nation's Agriculture and Food Supply
+3.1 Enhance the 3.1.4: Conduct risk assessments of microbial, chemical and physical hazards to meat, Met
+Protection of poultry and egg products
+Meat, Poultry and ; ,
+eects 3.1.2: Enhance industry compliance with regulatory requirements (Salmonella) Met
+from Foodborne | 3.1.3: Enhance industry compliance with regulatory requirements (Listeria monocyto- Met
+Hazards in the genes)
+US. 3.1.4: Develop new systems for detecting foodborne hazards Exceeded
