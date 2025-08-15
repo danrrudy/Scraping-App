@@ -16,7 +16,8 @@ from PyQt5.QtWidgets import (
     QMessageBox,
     QDialog,
     QInputDialog,
-    QComboBox
+    QComboBox,
+    QTextBrowser
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QImage
@@ -49,6 +50,7 @@ class TextScrapingReviewApp(QMainWindow):
         self.mode = self.settings.get("userMode", "User").lower()
         self.mid_df = None
         self.current_mid_index = 0
+        self.use_table_view = False # Switches based on the format type of the loaded Document
 
         # Initiate the MID manager if settings are already set
         mid_path = self.settings.get("MIDLocation", "")
@@ -230,6 +232,11 @@ class TextScrapingReviewApp(QMainWindow):
         self.text_edit.setReadOnly(False)  # Allow manual correction
         splitter.addWidget(self.text_edit)
 
+        # Table structured display
+        self.table_viewer = QTextBrowser()
+        splitter.addWidget(self.table_viewer)
+        self.table_viewer.hide()
+
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
         main_layout.addWidget(splitter, 4)
@@ -375,7 +382,8 @@ class TextScrapingReviewApp(QMainWindow):
                 ScraperClass = select_scraper_class(self.settings, int(row.get("Format_Type", -1)))
                 pages = [self.doc.load_page(p) for p in self.page_indices]
                 Scraper = ScraperClass(pages)
-                result = Scraper.scrape()
+                Scraper.scrape()
+                result = Scraper.result
                 
                 text_result = result.get("text", [])
                 if not isinstance(text_result, list):
@@ -390,6 +398,15 @@ class TextScrapingReviewApp(QMainWindow):
             except Exception as e:
                 self.logger.error(f"Failed to scrape all pages for {label}: {e}")
 
+
+            format_type = int(row.get("Format_Type", -1))
+            self.use_table_view = format_type in [1,5,6,7,10,11,14,16,17,18]
+            if self.use_table_view:
+                self.text_edit.hide()
+                self.table_viewer.show()
+            else:
+                self.table_viewer.hide()
+                self.text_edit.show()
 
             # self.current_page_index = 0
             # # PyMuPDF is 0-indexed, add 1 to match user's expected range
@@ -424,10 +441,16 @@ class TextScrapingReviewApp(QMainWindow):
             pixmap.scaled(self.pdf_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
         )
 
-        if 0 <= self.current_page_index < len(self.page_text_cache):
-            self.text_edit.setPlainText(self.page_text_cache[self.current_page_index])
+        text_content = self.page_text_cache[self.current_page_index]
+        if self.use_table_view:
+            self.table_viewer.setHtml(text_content)
         else:
-            self.text_edit.clear()
+            if 0 <= self.current_page_index < len(self.page_text_cache):
+                self.text_edit.setPlainText(self.page_text_cache[self.current_page_index])
+            else:
+                self.text_edit.clear()
+
+
 
 
         # Display document information
@@ -491,7 +514,8 @@ class TextScrapingReviewApp(QMainWindow):
             
             # Create a scraper instance for the page
             scraper = ScraperClass([page])
-            result = scraper.scrape()
+            scraper.scrape()
+            result = scraper.result
 
             self.scraped_text = result.get("text", [""])
             self.text_edit.setPlainText(self.scraped_text[0])

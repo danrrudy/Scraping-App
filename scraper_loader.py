@@ -16,6 +16,7 @@ def load_scraper_class(filepath):
 
 	# Load the scraper
 	module = importlib.util.module_from_spec(spec)
+	
 	# Run the loaded scraper
 	spec.loader.exec_module(module)
 

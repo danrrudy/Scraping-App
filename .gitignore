@@ -4,3 +4,4 @@ data/*
 *.log
 user_settings.json
 page_13.jpg
+table_scraper_PIPELINE.py

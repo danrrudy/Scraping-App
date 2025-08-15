@@ -1,17 +1,17 @@
 {
-  "total_entries": 1630,
+  "total_entries": 1705,
   "status_counts": {
-    "PASS": 295,
-    "FAIL": 1335
+    "PASS": 276,
+    "FAIL": 1429
   },
   "test_failures": {
-    "keyword_match": 364,
-    "table_detected": 411,
-    "stratobj_match": 970,
-    "goal_match": 427,
-    "obj_match": 417,
-    "text_scraped": 19,
-    "fatal": 161,
+    "keyword_match": 362,
+    "table_detected": 583,
+    "stratobj_match": 979,
+    "goal_match": 434,
+    "obj_match": 418,
+    "text_scraped": 20,
+    "fatal": 227,
     "pages_parsed": 10
   },
   "failures_by_agency": {
@@ -69,6 +69,9 @@
       ]
     },
     "COM": {
+      "2002": [
+        "table_detected"
+      ],
       "2004": [
         "keyword_match"
       ]
@@ -117,18 +120,21 @@
       "2004": [
         "keyword_match",
         "obj_match",
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ],
       "2005": [
         "goal_match",
         "keyword_match",
         "obj_match",
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ],
       "2006": [
         "goal_match",
         "obj_match",
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ],
       "2007": [
         "keyword_match"
@@ -179,7 +185,8 @@
         "text_scraped"
       ],
       "2003": [
-        "keyword_match"
+        "keyword_match",
+        "table_detected"
       ],
       "2004": [
         "keyword_match"
@@ -208,7 +215,8 @@
     },
     "Energy": {
       "2002": [
-        "keyword_match"
+        "keyword_match",
+        "table_detected"
       ],
       "2003": [
         "keyword_match"
@@ -303,6 +311,7 @@
         "goal_match",
         "keyword_match",
         "obj_match",
+        "table_detected",
         "text_scraped"
       ],
       "2011": [
@@ -327,7 +336,8 @@
         "text_scraped"
       ],
       "2011": [
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ]
     },
     "HHS": {
@@ -338,7 +348,12 @@
         "goal_match",
         "stratobj_match"
       ],
+      "2008": [
+        "table_detected"
+      ],
       "2009": [
+        "goal_match",
+        "stratobj_match",
         "table_detected"
       ],
       "2010": []
@@ -351,7 +366,8 @@
         "stratobj_match"
       ],
       "2004": [
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ],
       "2005": [
         "stratobj_match"
@@ -393,6 +409,9 @@
         "table_detected"
       ],
       "2005": [
+        "table_detected"
+      ],
+      "2006": [
         "table_detected"
       ],
       "2007": [
@@ -438,7 +457,15 @@
         "table_detected",
         "text_scraped"
       ],
+      "2008": [
+        "table_detected"
+      ],
       "2009": [
+        "table_detected"
+      ]
+    },
+    "SEC": {
+      "2006": [
         "table_detected"
       ]
     },
@@ -495,13 +522,18 @@
       ],
       "2004": [
         "stratobj_match",
+        "table_detected",
+        "text_scraped"
+      ],
+      "2006": [
         "text_scraped"
       ]
     },
     "TRS": {
       "2008": [
         "obj_match",
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ]
     },
     "VA": {
@@ -547,7 +579,8 @@
         "stratobj_match"
       ],
       "2009": [
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ],
       "2010": [
         "keyword_match",
@@ -593,7 +626,8 @@
         "stratobj_match"
       ],
       "2003": [
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ],
       "2004": [
         "keyword_match",
@@ -602,9 +636,7 @@
         "table_detected"
       ],
       "2005": [
-        "stratobj_match"
-      ],
-      "2006": [
+        "stratobj_match",
         "table_detected"
       ],
       "2010": [
@@ -640,16 +672,21 @@
         "table_detected",
         "text_scraped"
       ],
+      "2004": [
+        "table_detected"
+      ],
       "2005": [
         "table_detected"
       ],
       "2010": [
         "keyword_match",
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ],
       "2011": [
         "keyword_match",
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ]
     },
     "FCC": {
@@ -694,8 +731,10 @@
       "2009": [
         "stratobj_match"
       ],
+      "2010": [
+        "table_detected"
+      ],
       "2011": [
-        "stratobj_match",
         "table_detected"
       ]
     },
@@ -713,13 +752,22 @@
         "table_detected"
       ]
     },
+    "NEA": {
+      "2007": [],
+      "2009": [],
+      "2011": []
+    },
+    "NEH": {
+      "2004": [],
+      "2005": [],
+      "2006": [],
+      "2007": [],
+      "2008": [],
+      "2009": [],
+      "2010": [],
+      "2011": []
+    },
     "NLRB": {
-      "2004": [
-        "keyword_match"
-      ],
-      "2005": [
-        "keyword_match"
-      ],
       "2006": [
         "keyword_match"
       ],
@@ -733,7 +781,8 @@
         "keyword_match"
       ],
       "2010": [
-        "keyword_match"
+        "keyword_match",
+        "table_detected"
       ],
       "2011": [
         "keyword_match"
@@ -749,30 +798,42 @@
       "2003": [
         "goal_match",
         "obj_match",
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ],
       "2004": [
         "goal_match",
         "obj_match",
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ],
       "2005": [
         "obj_match",
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ],
       "2006": [
-        "goal_match"
+        "goal_match",
+        "table_detected"
+      ]
+    },
+    "NSF": {
+      "2009": [
+        "table_detected"
       ]
     },
     "OGE": {
       "2007": [
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ],
       "2008": [
+        "obj_match",
         "stratobj_match"
       ],
       "2009": [
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ],
       "2010": [
         "keyword_match",
@@ -826,7 +887,8 @@
         "table_detected"
       ],
       "2011": [
-        "stratobj_match"
+        "stratobj_match",
+        "table_detected"
       ]
     },
     "SSS": {
@@ -842,36 +904,42 @@
         "stratobj_match"
       ],
       "2008": [
+        "table_detected",
         "text_scraped"
+      ]
+    },
+    "USTDA": {
+      "2006": [
+        "table_detected"
       ]
     }
   },
   "outcomes_by_format_type": {
     "1": {
-      "PASS": 47,
-      "FAIL": 17,
+      "PASS": 46,
+      "FAIL": 18,
       "failed_tests": {
         "keyword_match": 16,
-        "table_detected": 2
+        "table_detected": 3
       }
     },
     "7": {
-      "PASS": 19,
-      "FAIL": 142,
+      "PASS": 17,
+      "FAIL": 144,
       "failed_tests": {
         "keyword_match": 45,
         "stratobj_match": 79,
         "goal_match": 41,
-        "table_detected": 6,
+        "table_detected": 38,
         "obj_match": 14
       }
     },
     "3": {
-      "PASS": 42,
-      "FAIL": 15,
+      "PASS": 39,
+      "FAIL": 18,
       "failed_tests": {
-        "keyword_match": 13,
-        "table_detected": 5
+        "table_detected": 8,
+        "keyword_match": 13
       }
     },
     "2": {
@@ -888,53 +956,55 @@
       "FAIL": 238,
       "failed_tests": {
         "stratobj_match": 212,
-        "table_detected": 137,
+        "table_detected": 172,
         "goal_match": 98,
         "keyword_match": 100,
         "obj_match": 71
       }
     },
     "6": {
-      "PASS": 20,
-      "FAIL": 75,
+      "PASS": 19,
+      "FAIL": 74,
       "failed_tests": {
         "stratobj_match": 58,
         "obj_match": 34,
-        "keyword_match": 16,
+        "keyword_match": 14,
+        "table_detected": 16,
         "goal_match": 13,
         "text_scraped": 1
       }
     },
     "5": {
-      "PASS": 38,
-      "FAIL": 21,
+      "PASS": 35,
+      "FAIL": 38,
       "failed_tests": {
         "keyword_match": 14,
-        "table_detected": 6,
-        "stratobj_match": 2,
+        "table_detected": 21,
+        "stratobj_match": 14,
+        "goal_match": 7,
         "text_scraped": 1
       }
     },
     "18": {
-      "PASS": 3,
-      "FAIL": 275,
+      "PASS": 0,
+      "FAIL": 278,
       "failed_tests": {
         "goal_match": 191,
-        "table_detected": 211,
+        "table_detected": 238,
         "stratobj_match": 273,
         "obj_match": 132,
         "keyword_match": 60
       }
     },
     "16": {
-      "PASS": 28,
-      "FAIL": 77,
+      "PASS": 29,
+      "FAIL": 76,
       "failed_tests": {
         "text_scraped": 1,
         "keyword_match": 14,
-        "table_detected": 3,
+        "table_detected": 8,
         "obj_match": 1,
-        "stratobj_match": 43
+        "stratobj_match": 40
       }
     },
     "21": {
@@ -952,7 +1022,8 @@
       "failed_tests": {
         "obj_match": 27,
         "keyword_match": 7,
-        "stratobj_match": 14
+        "stratobj_match": 14,
+        "table_detected": 2
       }
     },
     "9": {
@@ -962,15 +1033,16 @@
         "obj_match": 12,
         "goal_match": 12,
         "stratobj_match": 2,
-        "table_detected": 2
+        "table_detected": 6
       }
     },
     "14": {
-      "PASS": 6,
-      "FAIL": 38,
+      "PASS": 5,
+      "FAIL": 39,
       "failed_tests": {
         "keyword_match": 10,
-        "stratobj_match": 15
+        "stratobj_match": 15,
+        "table_detected": 1
       }
     },
     "8": {
@@ -992,14 +1064,14 @@
       }
     },
     "10": {
-      "PASS": 8,
-      "FAIL": 135,
+      "PASS": 4,
+      "FAIL": 139,
       "failed_tests": {
         "stratobj_match": 70,
+        "table_detected": 26,
         "pages_parsed": 6,
         "text_scraped": 6,
-        "table_detected": 6,
-        "obj_match": 26
+        "obj_match": 27
       }
     },
     "22": {
@@ -1016,7 +1088,7 @@
       "FAIL": 30,
       "failed_tests": {
         "stratobj_match": 28,
-        "table_detected": 2,
+        "table_detected": 7,
         "text_scraped": 5,
         "obj_match": 1
       }
@@ -1027,16 +1099,17 @@
       "failed_tests": {
         "stratobj_match": 35,
         "obj_match": 35,
-        "table_detected": 23,
+        "table_detected": 28,
         "pages_parsed": 1,
         "text_scraped": 1
       }
     },
     "4": {
-      "PASS": 9,
-      "FAIL": 11,
+      "PASS": 8,
+      "FAIL": 12,
       "failed_tests": {
-        "keyword_match": 10
+        "keyword_match": 10,
+        "table_detected": 1
       }
     },
     "20": {
@@ -1048,9 +1121,10 @@
       }
     },
     "13": {
-      "PASS": 9,
-      "FAIL": 6,
+      "PASS": 8,
+      "FAIL": 7,
       "failed_tests": {
+        "text_scraped": 1,
         "keyword_match": 3,
         "table_detected": 6
       }
@@ -1065,7 +1139,7 @@
     },
     "23": {
       "PASS": 8,
-      "FAIL": 10,
+      "FAIL": 73,
       "failed_tests": {
         "keyword_match": 6,
         "stratobj_match": 10

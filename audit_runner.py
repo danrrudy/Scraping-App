@@ -12,6 +12,9 @@ from scraper_loader import load_scraper_class
 def run_mid_audit(mid_manager, settings):
     logger = setup_logger()
     logger.info("Starting structured MID audit")
+        # Create output folder
+    output_dir = os.path.join("logs", "table_detections")
+    os.makedirs(output_dir, exist_ok=True)
 
     total_rows = len(mid_manager.df)
     results = []
@@ -40,10 +43,11 @@ def run_mid_audit(mid_manager, settings):
 
         for page_num in page_indices:
             try:
-                page = doc.load_page(page_indices[0])
+                page = doc.load_page(page_num)
                 scraper = ScraperClass(page)
-                result = scraper.scrape()
-                text = bool(result.get("text", "").strip())
+                scraper.scrape()
+                result = scraper.result
+                text = bool(result.get("text", [])[0].strip())
                 if not text:
                     return False    # Fail on first non-scraped page
             except Exception as e:
@@ -64,8 +68,9 @@ def run_mid_audit(mid_manager, settings):
             try:
                 page = doc.load_page(page_num)
                 scraper = ScraperClass(page)
-                result = scraper.scrape()
-                text = result.get("text", "").lower()
+                scraper.scrape()
+                result = scraper.result
+                text = result.get("text", "")[0].lower()
                 if keyword.lower() in text:
                     return True  # Match found = PASS
             except Exception as e:
@@ -86,8 +91,9 @@ def run_mid_audit(mid_manager, settings):
             try:
                 page = doc.load_page(page_num)
                 scraper = ScraperClass(page)
-                result = scraper.scrape()
-                text = result.get("text", "").lower()
+                scraper.scrape()
+                result = scraper.result
+                text = result.get("text", "")[0].lower()
                 if stratobj.lower() in text:
                     return True  # Match found = PASS
             except Exception as e:
@@ -108,8 +114,9 @@ def run_mid_audit(mid_manager, settings):
             try:
                 page = doc.load_page(page_num)
                 scraper = ScraperClass(page)
-                result = scraper.scrape()
-                text = result.get("text", "").lower()
+                scraper.scrape()
+                result = scraper.result
+                text = result.get("text", "")[0].lower()
                 if obj.lower() in text:
                     return True  # Match found = PASS
             except Exception as e:
@@ -133,8 +140,9 @@ def run_mid_audit(mid_manager, settings):
             try:
                 page = doc.load_page(page_num)
                 scraper = ScraperClass(page)
-                result = scraper.scrape()
-                text = result.get("text", "").lower()
+                scraper.scrape()
+                result = scraper.result
+                text = result.get("text", "")[0].lower()
                 if goal.lower() in text:
                     return True  # Match found = PASS
             except Exception as e:
@@ -156,9 +164,15 @@ def run_mid_audit(mid_manager, settings):
             for page_num in page_indices:
                 page = doc.load_page(page_num)
                 scraper = ScraperClass([page])
-                result = scraper.scrape()
-                if result.get("tables_found", 0) > 0:
-                    logger.debug(f"{result.get("tables_found")} table(s) found in {row.get("agency_yr")} page {page_num}")
+                scraper.scrape()
+                result = scraper.result
+                num_tables = len(result.get("tables",[]))
+                if num_tables > 0:
+                    logger.debug(f"{num_tables} table(s) found in {row.get("agency_yr")} page {page_num+1}, creating visualization")
+                    # Save image to file with page number
+                    output_path = os.path.join(output_dir, f"{row.get('agency_yr','unknown')}_page_{page_num+1}.png")
+                    result.get("images")[0].save(output_path)
+                    logger.debug("Diagnostic Image Saved")
                     return True # Pass if any page detects a table
         except Exception as e:
             logger.warning(f"table_detected error on {row.get('agency_yr')}: {e}")
@@ -193,7 +207,7 @@ def run_mid_audit(mid_manager, settings):
         logger.debug(f"Auditing line {i} of {total_rows}")
 
         entry = {
-            "index": i,
+            "index": i+1, # Convert to 1-indexed for human readers
             "agency_yr": agency_yr,
             "agency": agency,
             "year": int(year) if pd.notna(year) else "UNKNOWN",
