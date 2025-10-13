@@ -6,6 +6,7 @@ import json
 import pandas as pd
 from logger import setup_logger
 from scraping_tool_dialog import ScrapingToolDialog
+from extraction_tool_dialog import ExtractionToolDialog
 
 
 class SettingsDialog(QDialog):
@@ -26,7 +27,7 @@ class SettingsDialog(QDialog):
             "loggingLevel": ["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"],
             #logFileDirectory: Filepath, no options
             "consoleOutput": ["File", "Console", "Both"],
-            "userMode": ["User", "Dev"]
+            "userMode": ["User", "Dev", "Refviewer"]
         }
 
         # Create a form layout to display and edit settings
@@ -75,6 +76,8 @@ class SettingsDialog(QDialog):
             # Do not allow the user to manually edit the JSON for scrapingTools, this must happen through the dedicated window
             elif key == "scrapingTools":
                 continue
+            elif key == "extractionTools":
+                continue
 
             # Set up the file path editor for logfiles
             elif key == "logFileDirectory":
@@ -102,6 +105,10 @@ class SettingsDialog(QDialog):
         self.scraping_button = QPushButton("Set Up Scraping Tools")
         self.scraping_button.clicked.connect(self.open_scraping_tool_dialog)
         button_layout.addWidget(self.scraping_button)
+
+        self.extraction_button = QPushButton("Set Up Extraction Tools")
+        self.extraction_button.clicked.connect(self.open_extraction_tool_dialog)
+        button_layout.addWidget(self.extraction_button)
 
         self.save_button = QPushButton("Save Settings")
         self.save_button.clicked.connect(self.save_settings)
@@ -245,6 +252,25 @@ class SettingsDialog(QDialog):
                     if current_default in scraper_names:
                         widget.setCurrentText(current_default)
 
+    # Creates an instance of ExtractionToolDialog for interactive tool definitions
+    def open_extraction_tool_dialog(self):
+        dialog = ExtractionToolDialog(self.settings, self)
+        if dialog.exec_():
+            # Update settings with user edits
+            self.settings.update(dialog.updated_settings)
+            self.logger.info("Extraction tools updated")
+
+            extraction_tools = self.settings.get("extractionTools", {})
+            extractor_names = list(extraction_tools.keys())
+
+            if "defaultExtractor" in self.inputs:
+                widget = self.inputs["defaultExtractor"]
+                if isinstance(widget, QComboBox):
+                    widget.clear()
+                    widget.addItems(extractor_names)
+                    current_default = self.settings.get("defaultExtractor", "")
+                    if current_default in extractor_names:
+                        widget.setCurrentText(current_default)
 
     # Future addition: "Reset to Defaults" button
 

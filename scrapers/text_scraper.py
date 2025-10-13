@@ -15,7 +15,8 @@ class TextScraper(BaseScraper):
             "text": all_text,
             "page": [p.number + 1 for p in self.pages],  # fitz is zero-indexed, return 1-indexed
             "status": status,
-            "method": "TextScraper"
+            "method": "TextScraper",
+            "format": "text"
         }
 
 

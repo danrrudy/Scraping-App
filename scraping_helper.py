@@ -17,10 +17,20 @@ from PyQt5.QtWidgets import (
     QDialog,
     QInputDialog,
     QComboBox,
-    QTextBrowser
+    QTextBrowser,
+    QGroupBox,
+    QFormLayout,
+    QButtonGroup,
+    QRadioButton,
+    QAction,
+    QScrollArea,
+    QCheckBox,
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QByteArray
 from PyQt5.QtGui import QPixmap, QImage
+import base64
+from io import BytesIO
+import pandas as pd
 
 # local imports
 
@@ -29,7 +39,9 @@ from app_settings import load_settings, save_settings
 from mid_manager import MIDManager
 from logger import setup_logger
 from scraper_loader import select_scraper_class
+from extractor_loader import select_extractor_class 
 from audit_runner import run_mid_audit
+from image_canvas import ImageCanvas
 
 
 # Ensure project root is in sys.path
@@ -51,13 +63,26 @@ class TextScrapingReviewApp(QMainWindow):
         self.mid_df = None
         self.current_mid_index = 0
         self.use_table_view = False # Switches based on the format type of the loaded Document
+        self.edit_path = {"layer": None, "stratobj": 0, "obj": 0, "goal": 0, "metric": 0}
 
         # Initiate the MID manager if settings are already set
         mid_path = self.settings.get("MIDLocation", "")
         if mid_path:
             try:
                 self.mid_manager = MIDManager(mid_path)
-                self.logger.info("Successfully loaded MID")
+                # After loading MID DataFrame
+                for col, default in [
+                    ("metric_status", ""),   # radio selection per metric row
+                    ("_flag", False),        # flag for review
+                    ("_no_metrics", False),  # marks a goal saved without metrics
+                    ("_gen", False),
+                    ("_achieved", False),
+                    ("_future_dated", False)
+                ]:
+                    if col not in self.mid_manager.df.columns:
+                        self.mid_manager.df[col] = default
+                # Ensure helper columns exist
+
             except Exception as e:
                 self.logger.error(f"Failed to Load MID: {e}")
         else:
@@ -66,9 +91,12 @@ class TextScrapingReviewApp(QMainWindow):
             # NOTE: This still executes at first launch, which is proabably bad form
             QMessageBox.warning(self, "MID Location not Specified", "Please select a Master Input Document in Settings.")
 
-
-        self.dev_mode_widgets = []
-        self.user_mode_widgets = []
+        # We keep separate lists of widgets for each mode so they can be dynamically loaded and unloaded
+        # Any widget not assigned to a mode will always be shown
+        # Widgets assigned to a mode will be shown in that mode, and hidden in others 
+        self.dev_mode_widgets = []      # Superset of user mode, distinct from reviewer
+        self.user_mode_widgets = []     # Base mode, minimum useful functionality
+        self.reviewer_mode_widgets = [] # Superset of user mode, with added review functionality
 
         self.doc = None                 # Current page
         self.page_indices = []          # List of all zero-indexed pages recorded in the MID
@@ -82,6 +110,19 @@ class TextScrapingReviewApp(QMainWindow):
             "active_test": None,
             "results": {},  # format: {row_index: {"status": "ACCEPT" or "REJECT", "label": ..., "pages": [...]}}
         }
+        self.mid_field_editors = {}     #{key: QTextEdit}
+        self.mid_field_keys = ["stratobj", "obj", "goal", "metric"]
+
+        self.expansion_state = {
+            "base_level": None,       # lowest present on the seed row (stratobj|obj|goal|metric|None)
+            "working_level": None,    # where the user is currently adding units
+            "seed_index": None,       # index of the original (non-generated) row we started from
+        }
+
+        # overlays + coords from the most recent scrape
+        self.page_overlays = {}   # {page_index: PNG bytes}
+        self.cells_by_page = {}   # {page_index: [(x0,y0,x1,y1), ...]} (for later click-to-scrape)
+        self.page_dims     = {}   # {page_index: (w_pt, h_pt)}         (for later)
 
 
         # Set up file structure if it doesn't exist
@@ -97,7 +138,60 @@ class TextScrapingReviewApp(QMainWindow):
             else:
                 self.logger.debug("First MID row loaded successfully")
 
-        
+    def _pil_to_qpixmap(self, pil_img):
+        if pil_img is None:
+            self.logger.warning("image was none!")
+            return None
+        if pil_img.mode in ("RGBA", "LA"):
+            fmt = QImage.Format_RGBA8888
+            img = pil_img.convert("RGBA")
+            bpl = pil_img.width * 4
+        else:
+            fmt = QImage.Format_RGB888
+            img = pil_img.convert("RGB")
+            bpl = pil_img.width * 3
+        self.logger.debug("converted image")
+        data = img.tobytes("raw", img.mode)
+        self.logger.debug("converted to raw data")
+        qimg = QImage(data, img.width, img.height, bpl, fmt).copy()
+        return QPixmap.fromImage(qimg)
+
+    def _build_image_html_per_page(self, scrape_result, page_indices):
+        pages = scrape_result.get("result", []) or []
+        html_by_page = []
+
+        # Map display order to the internal 0..N page order we scraped
+        # (scraper used enumerate(self.pages) so it's already aligned; we still guard on bounds)
+        for local_idx, _pdf_zero_index in enumerate(page_indices):
+            tables = pages[local_idx] if local_idx < len(pages) else []
+            chunks = []
+            if tables:
+                for t in tables:
+                    img = t.get("table_image", None)
+                    if img is None:
+                        continue
+                    src = self._pil_to_data_uri(img)
+                    # wrap each with a light border/caption
+                    cap = f"Page {t.get('page_number','?')} – Table {t.get('table_index_on_page','?')}"
+                    chunks.append(
+                        f"<div style='margin:10px 0;'><div style='font-size:12px;color:#888'>{cap}</div>"
+                        f"<img src='{src}' style='max-width:100%; height:auto; border:1px solid #ddd;'/></div>"
+                    )
+            else:
+                chunks.append("<div style='color:#999;font-style:italic'>No tables detected on this page.</div>")
+
+            html_by_page.append("<div>" + "".join(chunks) + "</div>")
+
+        return html_by_page
+
+    def _on_table_image_click(self, info: dict):
+        self.logger.info(f"Clicked table image: {info}")
+        # If you know PDF page width/height in points, map to PDF coords here:
+        # pdf_w_pts, pdf_h_pts = self.page_dims[self.current_page_index]
+        # x_pdf = info['x_nat'] * (pdf_w_pts / info['nat_w'])
+        # y_pdf = info['y_nat'] * (pdf_h_pts / info['nat_h'])
+        # ... use x_pdf, y_pdf as needed.
+    
 
     def init_ui(self):
         self.logger.debug(f"Initializing UI in {self.mode} mode")
@@ -131,14 +225,108 @@ class TextScrapingReviewApp(QMainWindow):
             info_layout.addWidget(label)
             self.info_labels[field.lower()] = label # set keys to lowercase version of field name
 
+        mid_fields_group = QGroupBox("Fields")
+        mid_form = QFormLayout()
+
+        labels_for = {
+            "stratobj": "stratobj",
+            "obj": "obj",
+            "goal": "goal",
+            "metric": "metric"
+        }
+
+        for k in self.mid_field_keys:
+            editor = QTextEdit()
+            editor.setFixedHeight(70)
+            self.mid_field_editors[k] = editor 
+            mid_form.addRow(labels_for[k] + ":", editor)
+
+        mid_fields_group.setLayout(mid_form)
+        info_layout.addWidget(mid_fields_group)
+
+        # --- Metric status radios (Under the Metric editor) ---
+        status_row = QHBoxLayout()
+        status_row.setSpacing(8)
+
+        status_lbl = QLabel("Metric status:")
+        status_row.addWidget(status_lbl)
+
+        self.metric_status_group = QButtonGroup(self)  # keeps exclusivity
+        self.metric_status_buttons = {}  # key -> QRadioButton
+
+        for key, label in [
+            ("Exceeded", "Exceeded"),
+            ("Met", "Met"),
+            ("Unmet", "Unmet"),
+            ("Deferred", "Deferred"),
+            ("Non-Quant", "Non-Quant"),
+            ("Baseline", "Baseline"),
+        ]:
+            rb = QRadioButton(label)
+            self.metric_status_group.addButton(rb)
+            self.metric_status_buttons[key] = rb
+            status_row.addWidget(rb)
+
+        # put the status row right below the metric QTextEdit
+        mid_form.addRow("", QWidget())  # tiny spacer line if you like
+        mid_form.addRow(status_row)
+
+        # --- Action buttons under the status radios ---
+        actions_row = QHBoxLayout()
+        self.chk_flag = QCheckBox("Flag for review")
+        self.chk_achieved = QCheckBox("Achieved")
+        self.chk_future_dated = QCheckBox("Future-Dated")
+        self.btn_save_goal_no_metrics = QPushButton("Save Goal (no metrics)")
+
+        self.chk_flag.stateChanged.connect(self.on_flag_togggle)
+        self.chk_achieved.stateChanged.connect(self.on_achieved_toggle)
+        self.chk_future_dated.stateChanged.connect(self.on_fd_togggle)
+
+        self.btn_save_goal_no_metrics.clicked.connect(self.on_save_goal_no_metrics_clicked)
+
+        actions_row.addWidget(self.chk_flag)
+        self.chk_flag.setShortcut("Ctrl+F")
+        actions_row.addWidget(self.chk_achieved)
+        actions_row.addWidget(self.chk_future_dated)
+        actions_row.addWidget(self.btn_save_goal_no_metrics)
+        mid_form.addRow(actions_row)
+
+
+
+        expand_group = QGroupBox("Expand to Metrics")
+        expand_layout = QVBoxLayout()
+
+        self.hint_lbl = QLabel("")
+        self.hint_lbl.setWordWrap(True)
+        expand_layout.addWidget(self.hint_lbl)
+
+        # Adaptive depth-first controls
+        self.btn_add = QPushButton("")   # label set dynamically
+        self.btn_done = QPushButton("")  # label set dynamically
+
+        self.btn_add.clicked.connect(self.on_add_clicked)
+        self.btn_done.clicked.connect(self.on_done_clicked)
+
+        expand_layout.addWidget(self.btn_add)
+        expand_layout.addWidget(self.btn_done)
+
+
+        expand_group.setLayout(expand_layout)
+        info_layout.addWidget(expand_group)
 
 
         # --- Control Panel ---
+        # Menu action
+        save_mid_act = QAction("Save MID…", self)
+        save_mid_act.triggered.connect(self.save_mid_to_file)
+        self.menuBar().addMenu("&File").addAction(save_mid_act)
+        save_mid_act.setShortcut("Ctrl+S")
+
         control_layout = QVBoxLayout()
-        load_btn = QPushButton("Load Document")
-        load_btn.clicked.connect(self.load_document)
-        control_layout.addWidget(load_btn)
-        self.logger.debug("Added Load Document button")
+        # load_btn = QPushButton("Load Document")
+        # load_btn.clicked.connect(self.load_document)
+        # control_layout.addWidget(load_btn)
+        # self.logger.debug("Added Load Document button")
 
         prev_btn = QPushButton("Previous Page")
         prev_btn.clicked.connect(self.prev_page)
@@ -150,30 +338,38 @@ class TextScrapingReviewApp(QMainWindow):
         control_layout.addWidget(next_btn)
         self.logger.debug("Added Next Page button")
 
-        scrape_btn = QPushButton("Scrape Page")
-        scrape_btn.clicked.connect(self.scrape_page)
-        control_layout.addWidget(scrape_btn)
-        self.logger.debug("Added Scrape Page button")
+        # scrape_btn = QPushButton("Scrape Page")
+        # scrape_btn.clicked.connect(self.scrape_page)
+        # control_layout.addWidget(scrape_btn)
+        # self.logger.debug("Added Scrape Page button")
 
-        accept_btn = QPushButton("Accept")
-        accept_btn.clicked.connect(self.accept_scrape)
-        control_layout.addWidget(accept_btn)
-        self.logger.debug("Added Accept Scrape button")
+        # accept_btn = QPushButton("Accept")
+        # accept_btn.clicked.connect(self.accept_scrape)
+        # control_layout.addWidget(accept_btn)
+        # self.logger.debug("Added Accept Scrape button")
 
-        reject_btn = QPushButton("Reject")
-        reject_btn.clicked.connect(self.reject_scrape)
-        control_layout.addWidget(reject_btn)
-        self.logger.debug("Added Reject Scrape button")
+        # reject_btn = QPushButton("Reject")
+        # reject_btn.clicked.connect(self.reject_scrape)
+        # control_layout.addWidget(reject_btn)
+        # self.logger.debug("Added Reject Scrape button")
 
         next_entry_btn = QPushButton("Next MID Entry")
         next_entry_btn.clicked.connect(self.next_mid_entry)
         control_layout.addWidget(next_entry_btn)
+        next_entry_btn.setShortcut("Ctrl+Right")
         self.logger.debug("Added Next MID Entry button")
 
         prev_entry_btn = QPushButton("Previous MID Entry")
         prev_entry_btn.clicked.connect(self.prev_mid_entry)
         control_layout.addWidget(prev_entry_btn)
+        next_entry_btn.setShortcut("Ctrl+Left")
         self.logger.debug("Added Previous MID Entry button")
+
+        select_entry_btn = QPushButton("Jump to MID Entry...")
+        select_entry_btn.clicked.connect(self.select_mid_entry)
+        control_layout.addWidget(select_entry_btn)
+        next_entry_btn.setShortcut("Ctrl+O")
+        self.logger.debug("Added Select MID Entry button")
 
         settings_btn = QPushButton("Settings")
         settings_btn.clicked.connect(self.open_settings)
@@ -194,7 +390,7 @@ class TextScrapingReviewApp(QMainWindow):
             "table_detected", "text_scraped", "goal_match", "obj_match",
             "keyword_match", "stratobj_match", "pages_parsed", "pdf_found"
         ])
-        failures_label = QLabel("Load Failures For Test:")
+        failures_label = QLabel("Restrict to:")
         control_layout.addWidget(failures_label)
         control_layout.addWidget(self.failure_test_combo)
         self.dev_mode_widgets.append(self.failure_test_combo)
@@ -230,19 +426,29 @@ class TextScrapingReviewApp(QMainWindow):
         # Scraped Text Display
         self.text_edit = QTextEdit()
         self.text_edit.setReadOnly(False)  # Allow manual correction
+        self.text_edit.show()
         splitter.addWidget(self.text_edit)
+        self.text_edit.setVisible(True)
 
-        # Table structured display
+        # Image viewer & mouse tracker
+        self.image_canvas = ImageCanvas(self, enable_zoom=True)
+        # self.image_canvas.show()
+        # self.image_canvas.pointClicked.connect(self._on_table_image_click)  # define handler below
+        # splitter.addWidget(self.image_canvas)
+
+
+        # # Table structured display
         self.table_viewer = QTextBrowser()
-        splitter.addWidget(self.table_viewer)
-        self.table_viewer.hide()
+        # splitter.addWidget(self.table_viewer)
+        # self.dev_mode_widgets.append(self.table_viewer)
+        # # self.table_viewer.show()
 
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
         main_layout.addWidget(splitter, 4)
 
         # hide the dev mode labels if in user mode and v.v.
-        self.update_mode_ui()
+        # self.update_mode_ui()
 
     # Create Necessary File Structure
     def init_files(self):
@@ -301,7 +507,7 @@ class TextScrapingReviewApp(QMainWindow):
                 self.entry_index_label.setText(
                     f"Entry {current_mid_index + 1:,} of {mid_length:,}"
                 )
-            current_format_type = row.get("Format_Type", "")
+            current_format_type = row.get("Format_Type_Updated", "")
 
         # Map variables to their display lables manually if they are not the same
         for key, label in self.info_labels.items():
@@ -316,18 +522,39 @@ class TextScrapingReviewApp(QMainWindow):
             else:
                 value = "N/A"
             label.setText(f"{key.capitalize()}: {value}")
+        self.refresh_expansion_controls()
 
     def update_mode_ui(self):
-        is_dev = self.mode.lower() == "dev"
-        self.logger.info("updating UI for dev mode") if is_dev else self.logger.info("updating UI for user mode")
+        # Cache mode in case of race conditions
+        mode = self.mode.lower()
+        self.logger.info(f"updating UI for {mode} mode")
 
-        for widget in self.dev_mode_widgets:
-            widget.setVisible(is_dev)
+        match mode:
+            # always set the current mode last in case any widget is a member of multiple lists
+            case "dev":
+                for widget in self.user_mode_widgets:
+                    widget.setVisible(False)
+                for widget in self.reviewer_mode_widgets:
+                    widget.setVisible(False)
+                for widget in self.dev_mode_widgets:
+                    widget.setVisible(True)
+            case "user":
+                for widget in self.dev_mode_widgets:
+                    widget.setVisible(False)
+                for widget in self.reviewer_mode_widgets:
+                    widget.setVisible(False)
+                for widget in self.user_mode_widgets:
+                    widget.setVisible(True)
+            case "reviewer":
+                for widget in self.user_mode_widgets:
+                    widget.setVisible(False)
+                for widget in self.dev_mode_widgets:
+                    widget.setVisible(False)
+                for widget in self.user_mode_widgets:
+                    widget.setVisible(True)
 
-        for widget in self.user_mode_widgets:
-            widget.setVisible(not is_dev)
 
-    # For manual document loading - will likely be depricated
+    # For manual document loading - depricated
     def load_document(self):
         self.logger.debug("Attempting to load a document")
         path, _ = QFileDialog.getOpenFileName(self, "Open PDF", "", "PDF Files (*.pdf)")
@@ -340,6 +567,7 @@ class TextScrapingReviewApp(QMainWindow):
         self.current_page_index = 0
 
         self.show_page()
+
 
     # Actual document loading based on MID entry
     def load_mid_entry_document(self):
@@ -379,40 +607,81 @@ class TextScrapingReviewApp(QMainWindow):
             self.page_text_cache = [""] * len(self.page_indices)
 
             try:
-                ScraperClass = select_scraper_class(self.settings, int(row.get("Format_Type", -1)))
+                format_type = int(row.get("Format_Type_Updated", -1))
+                ScraperClass = select_scraper_class(self.settings, format_type)
                 pages = [self.doc.load_page(p) for p in self.page_indices]
                 Scraper = ScraperClass(pages)
                 Scraper.scrape()
                 result = Scraper.result
-                
-                text_result = result.get("text", [])
+                self.logger.info("got scraper result!")
+                self.current_scrape_result = result or {}               
+
+                if str(result.get("format", "")).lower() == "image":
+                    self.logger.debug("using image format")
+                    result_pages = result.get("result",[]) or []
+                    self._page_table_images = []
+                    for local_idx, _pdf_idx in enumerate(self.page_indices):
+                        self.logger.debug("iter page")
+                        tables = result_pages[local_idx] if local_idx < len(result_pages) else []
+                        pil_img = tables[0].get("table_image") if tables else None
+                        self._page_table_images.append(pil_img)
+
+                    img = self._page_table_images[self.current_page_index]
+                    self.logger.debug("got image")
+                    qpix = self._pil_to_qpixmap(img) if img is not None else None   
+                    self.logger.debug("converted to qpixmap")
+                    if qpix is not None:
+                        self.image_canvas.set_image(qpix, meta = {"page": self.current_page_index, "table": 0}, fit = True)
+                        self.image_canvas.show() 
+                        # if hasattr(self, "text_edit"): self.text_edit.hide()
+                        self.logger.debug("displayed")
+                    # #switch to HTML viewer
+                    # self.use_table_view = True 
+                    # self.text_edit.setVisible(False)
+                    self.image_canvas.setVisible(True)
+                    text_result = []
+                else:
+                    text_result = result.get("text")
+                    self.page_text_cache = text_result
+                    self.text_edit.setPlainText(self.page_text_cache[self.current_page_index])
+                    self.logger.debug("showing text editor")
+                    self.image_canvas.setVisible(False)
+                    self.image_canvas.hide()
+                    self.text_edit.setVisible(True)
+                    self.text_edit.show()
+
+
+
+
+                # self.logger.debug(f"html to render: {text_result[0]}")
+
+
                 if not isinstance(text_result, list):
                     raise ValueError("Expected a list of strings from the Scraper!")
 
-                if len(text_result) != len(self.page_indices):
-                    self.logger.warning(f"Scraper returned {len(text_result)} pages, expected {len(self.page_indices)}")
+                # if len(text_result) != len(self.page_indices):
+                #     self.logger.warning(f"Scraper returned {len(text_result)} pages, expected {len(self.page_indices)}")
 
-                self.page_text_cache = text_result
-                self.logger.info(f"Scraped {len(self.page_text_cache)} pages from {label}")    
+                # self.page_text_cache = text_result
+                # self.logger.info(f"Scraped {len(self.page_text_cache)} pages from {label}")    
 
             except Exception as e:
                 self.logger.error(f"Failed to scrape all pages for {label}: {e}")
 
 
-            format_type = int(row.get("Format_Type", -1))
-            self.use_table_view = format_type in [1,5,6,7,10,11,14,16,17,18]
-            if self.use_table_view:
-                self.text_edit.hide()
-                self.table_viewer.show()
-            else:
-                self.table_viewer.hide()
-                self.text_edit.show()
+            # Decide which right-hand widget to show
+            is_image = str(self.current_scrape_result.get("format","")).lower() == "image"
+            self.use_table_view = is_image or (self.use_table_view)  # image implies table_view
+            # self.text_edit.setVisible(not self.use_table_view)
+            # self.image_canvas.setVisible(self.use_table_view)
 
             # self.current_page_index = 0
             # # PyMuPDF is 0-indexed, add 1 to match user's expected range
             # display_pages = [p+1 for p in self.page_indices]
             # self.logger.info(f"Loaded {filename} for {label}, pages: {display_pages}")
             self.show_page()
+            self.load_mid_fields_from_row()
+            self.refresh_expansion_controls()
             return True
 
         except Exception as e:
@@ -430,21 +699,45 @@ class TextScrapingReviewApp(QMainWindow):
         else:
             self.logger.warning("No page reference found, defaulting to page 1!")
             page_number = self.current_page_index
-        self.logger.debug(f"Attempting to load index {self.current_page_index}, page {page_number}")
-        page = self.doc.load_page(page_number)
 
-        # Render the page and upscale by 2x
-        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
-        img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888)
-        pixmap = QPixmap.fromImage(img)
-        self.pdf_label.setPixmap(
-            pixmap.scaled(self.pdf_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        )
+        p = self.current_page_index
 
-        text_content = self.page_text_cache[self.current_page_index]
-        if self.use_table_view:
-            self.table_viewer.setHtml(text_content)
+        # NEW: prefer overlay for this page if we have one
+        overlay_png = None
+        # 1) direct per-page map
+        if getattr(self, "page_overlays", None):
+            overlay_png = self.page_overlays.get(p)
+
+        # 2) compatibility: allow overlay inside result["pages"][i]["overlay_image"]
+        if overlay_png is None and getattr(self, "current_scrape_result", None):
+            pages = self.current_scrape_result.get("pages") or []
+            for it in pages:
+                if it.get("page_index") == p and it.get("overlay_image"):
+                    overlay_png = it["overlay_image"]
+                    break
+
+        if overlay_png:
+            self._show_png_bytes_in_center(overlay_png)
+            self.update_info_labels()   # keep your normal UI refresh
+            return
+
         else:
+
+            self.logger.debug(f"Attempting to load index {self.current_page_index}, page {page_number}")
+            page = self.doc.load_page(page_number)
+
+            # Render the page and upscale by 2x
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+            img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888).copy()
+            pixmap = QPixmap.fromImage(img)
+            self.pdf_label.setPixmap(
+                pixmap.scaled(self.pdf_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            )
+
+            text_content = self.page_text_cache[self.current_page_index]
+            # if self.use_table_view:
+            #     self.table_viewer.setHtml(text_content)
+
             if 0 <= self.current_page_index < len(self.page_text_cache):
                 self.text_edit.setPlainText(self.page_text_cache[self.current_page_index])
             else:
@@ -466,7 +759,10 @@ class TextScrapingReviewApp(QMainWindow):
     def next_page(self):
         self.logger.debug("Attempting to load next page")
         if self.page_indices and self.current_page_index < len(self.page_indices) - 1:
-            self.page_text_cache[self.current_page_index] = self.text_edit.toPlainText()
+            if not self.use_table_view:
+                self.page_text_cache[self.current_page_index] = self.text_edit.toPlainText()
+            else:
+                self.page_text_cache[self.current_page_index] = self.table_viewer.toHtml()
             self.logger.debug("Next page is valid")
             self.current_page_index += 1
             self.show_page()
@@ -495,7 +791,7 @@ class TextScrapingReviewApp(QMainWindow):
             return
         
         row = self.mid_manager.get_current_row()
-        format_type = int(row.get("Format_Type", -1))
+        format_type = int(row.get("Format_Type_Updated", -1))
         # actual_page_number adds the page index to the start page
         if self.page_indices:
             actual_page_number = self.page_indices[self.current_page_index]
@@ -506,6 +802,7 @@ class TextScrapingReviewApp(QMainWindow):
             # For now, hardcode this to pull the basic text scraper
             # TODO: grab the user's scraper-doctype mappings for scraper selection
             ScraperClass = select_scraper_class(self.settings, format_type)
+            ExtractorClass = select_extractor_class(self.settings, format_type)
 
 
             # Extract the current page to scrape
@@ -517,6 +814,18 @@ class TextScrapingReviewApp(QMainWindow):
             scraper.scrape()
             result = scraper.result
 
+            extractor = ExtractorClass(result, metadata ={"agency_yr": self.current_agency_yr}) 
+            extractor.extract()
+            struct = extractor.result 
+            if struct.get("format") == "html":
+                self.page_text_cache = struct["text"][self.current_page_index]
+                self.use_table_view = True 
+                self.table_viewer.setHtml(struct["text"][self.current_page_index])
+            else:
+                self.use_table_view = False 
+
+
+
             self.scraped_text = result.get("text", [""])
             self.text_edit.setPlainText(self.scraped_text[0])
 
@@ -526,6 +835,27 @@ class TextScrapingReviewApp(QMainWindow):
         except Exception as e:
             self.logger.critical(f"failed to scrape page {actual_page_number+1}: {e}")
             QMessageBox.critical(self, "Scrape Error", str(e))
+
+    def extract_content(self):
+        self.logger.debug(f"Attempting to extract content from page {self.current_page_index}")
+
+        if not self.doc:
+            self.logger.warning("Document could not be found!")
+            return
+
+        row = self.mid_manager.get_current_row()
+        format_type = int(row.get("Format_Type_Updated", -1))
+        if self.page_indices:
+            actual_page_number = self.page_indices[self.current_page_index]
+        else:
+            actual_page_number = self.current_page_index
+
+        try:
+            print("i need to put something in this block")
+            # Extraction logic goes here
+
+        except Exception as e:
+            self.logger.critical(f"Failed to scrape page {actual_page_number+1}: {e}")
 
 
     def accept_scrape(self):
@@ -555,6 +885,8 @@ class TextScrapingReviewApp(QMainWindow):
                 self.logger.info(f"Saved accepted scrape to {output_path}")
 
         # Outside conditional
+        self.refresh_expansion_controls()
+        self._commit_sidebar_fields()
         self.next_mid_entry()
 
 
@@ -587,12 +919,28 @@ class TextScrapingReviewApp(QMainWindow):
 
     # Move to the next entry without any output
     def next_mid_entry(self):
+        self._commit_sidebar_fields()
         self.advance_to_valid_entry(direction="next")
+        self.refresh_expansion_controls()
         # self.scrape_page()
 
     # Move to previous entry without any output
     def prev_mid_entry(self):
+        self._commit_sidebar_fields()
         self.advance_to_valid_entry(direction="prev")
+        self.refresh_expansion_controls()
+        # self.scrape_page()
+
+    # Move to specified MID entry
+    def select_mid_entry(self):
+        self._commit_sidebar_fields()
+        num, ok = QInputDialog.getInt(self, "Jump to MID Entry", "num", min = 1, max=len(self.mid_manager.df), step=1)
+        if not ok: return
+        if num < 1 or num > len(self.mid_manager.df):
+            QMessageBox.warning("Out of range!")
+            return
+        self.mid_manager.select_mid_entry(num)
+        self.refresh_expansion_controls()
         # self.scrape_page()
 
 
@@ -609,6 +957,10 @@ class TextScrapingReviewApp(QMainWindow):
                 QMessageBox.warning(self, "No More Entries", "No further valid documents were found")
                 break
 
+            row = self.mid_manager.get_current_row()
+            format_type = int(row.get("Format_Type_Updated", -1))
+            if(format_type not in [19, 20, 21, 22, 23]):
+                continue
             success = self.load_mid_entry_document()
             if success:
                 self.update_info_labels()
@@ -734,6 +1086,510 @@ class TextScrapingReviewApp(QMainWindow):
         except Exception as e:
             self.logger.error(f"Failed to export review results: {e}")
             QMessageBox.critical(self, "Export Error", str(e))
+
+    def refresh_expansion_controls(self):
+        """Set button texts/visibility based on what's filled on the CURRENT ROW."""
+        # Hide by default
+        self.btn_add.hide(); self.btn_done.hide()
+        self.hint_lbl.setText("")
+
+        mm = getattr(self, "mid_manager", None)
+        if not mm or mm.df is None or mm.current_index is None:
+            self.hint_lbl.setText("<i>No MID row loaded.</i>")
+            return
+
+        mm.ensure_gen_flag()
+
+
+        row = mm.df.iloc[mm.current_index].to_dict()
+        fields = [
+            ("so",   (row.get("stratobj") or "").strip()),
+            ("obj",  (row.get("obj") or "").strip()),
+            ("goal", (row.get("goal") or "").strip()),
+            ("metr", (row.get("metric") or "").strip()),
+        ]
+        last_filled = -1
+        for i, (_, val) in enumerate(fields):
+            if val:
+                last_filled = i
+
+        next_index = min(last_filled+1, len(fields) - 1)
+        next_key = fields[next_index][0]
+
+        for key, value in fields:
+            self._set_text(key, value)
+
+        # Lightweight UX: set buttons/labels based on where we’re continuing
+        if next_key == "stratobj":
+            self.btn_add.setText("Add Strategic Objective")
+            self.hint_lbl.setText("<i>Enter a Strategic Objective, then click Add Strategic Objective.</i>")
+            self.btn_add.show()
+        elif next_key == "obj":
+            self.btn_add.setText("Add Objective")
+            self.btn_done.setText("Done with Strategic Objective")
+            self.btn_add.show(); self.btn_done.show()
+            self.hint_lbl.setText("<i>Enter an Objective under this Strategic Objective.</i>")
+        elif next_key == "goal":
+            self.btn_add.setText("Add Goal")
+            self.btn_done.setText("Done with Objective")
+            self.btn_add.show(); self.btn_done.show()
+            self.hint_lbl.setText("<i>Enter a Goal under this Objective.</i>")
+        else:  # metric
+            self.btn_add.setText("Add Metric")
+            self.btn_done.setText("Done with Goal")
+            self.btn_add.show(); self.btn_done.show()
+            self.hint_lbl.setText("<i>Add one or more Metrics for this Goal.</i>")
+
+        # Finally, place focus where we want the user to type next
+        self._focus(next_key)
+
+
+    def save_mid_to_file(self):
+        # Commit current editors first
+        self._commit_sidebar_fields()
+
+        if not hasattr(self, "mid_manager") or self.mid_manager.df is None:
+            QMessageBox.warning(self, "Save MID", "No MID loaded.")
+            return
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save MID", "mid_export.xlsx",
+            "Excel Workbook (*.xlsx);;CSV (*.csv)"
+        )
+        if not path:
+            return
+
+        df = self.mid_manager.df.copy()
+
+        try:
+            if path.lower().endswith(".csv"):
+                df.to_csv(path, index=False)
+            else:
+                # default to Excel
+                with pd.ExcelWriter(path, engine="xlsxwriter") as xw:
+                    df.to_excel(xw, index=False, sheet_name="MID")
+            self.statusBar().showMessage(f"Saved MID to {path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Save MID", f"Failed to save:\n{e}")
+
+    # def set_keyboard_shortcuts(self):
+    #     self.chk_flag.setShortcut("Ctrl+F")
+    #     self.chk_achieved.setShortcut("Ctrl+A")
+    #     self.save_mid_act.setShortcut("Ctrl+S")
+    #     self.
+
+
+    # Utility: save editors into the active row (you already have a similar method)
+    def _commit_sidebar_fields(self):
+        if not hasattr(self, "mid_manager") or self.mid_manager.df is None:
+            return
+        idx = self.mid_manager.current_index
+        if idx is None: return
+        for k, ed in self.mid_field_editors.items():
+            self.mid_manager.df.at[idx, k] = ed.toPlainText().strip()
+        self.mid_manager.df.at[idx, "_flag"] = self.chk_flag.isChecked()
+        self.logger.info(f"saved flag status: {self.mid_manager.df.at[idx, "_flag"]}")
+        self.mid_manager.df.at[idx, "_achieved"] = self.chk_achieved.isChecked()
+        self.mid_manager.df.at[idx, "_future_dated"] = self.chk_future_dated.isChecked()
+        self.logger.info(f"Saved information for {self.current_agency_yr}: ")
+        # metric status too
+        self.mid_manager.df.at[idx, "metric_status"] = self._get_metric_status()
+
+    def _clear_field(self, key: str):
+        ed = self.mid_field_editors.get(key)
+        if ed: ed.clear()
+
+    def _goto_index(self, new_idx: int):
+        """Your existing navigation method; ensure it sets current_index then calls update_info_labels/show_page/etc."""
+        self.mid_manager.current_index = new_idx
+        self.update_info_labels()
+        self.load_mid_fields_from_row()
+        self.refresh_expansion_controls()
+        # show_page() etc. if needed
+
+    def _insert_child_and_goto(self, parent_idx: int, child_level: str) -> int:
+        """
+        Clone parent row, clear the child_level and below, insert after parent, and move there.
+        Returns the new index.
+        """
+        mm = self.mid_manager
+        new_row = mm.clone_for_child(parent_idx, child_level)
+        new_idx = mm.insert_row_after(parent_idx, new_row)
+        self._goto_index(new_idx)
+
+        # Focus on the editor for the child level
+        self._clear_field(child_level)
+        return new_idx
+
+    def _text(self, key: str) -> str:
+        ed = self.mid_field_editors.get(key)
+        return ed.toPlainText().strip() if ed else ""
+
+    def _set_text(self, key: str, value: str):
+        ed = self.mid_field_editors.get(key)
+        if ed:
+            ed.blockSignals(True)
+            ed.setPlainText(value or "")
+            ed.blockSignals(False)
+
+    def _focus(self, key: str):
+        # self.edit_path["layer"] = key
+        # for k, v in idx.items():
+        #     self.edit_path[k] = v
+        ed = self.mid_field_editors.get(key)
+        if ed:
+            ed.setFocus()
+
+    def _get_metric_status(self) -> str:
+        for key, rb in self.metric_status_buttons.items():
+            if rb.isChecked():
+                return key
+        return ""
+
+    def _set_metric_status(self, value: str):
+        # value is one of "Exceeded","Met","Unmet","Deferred" or ""
+        for key, rb in self.metric_status_buttons.items():
+            rb.blockSignals(True)
+            rb.setChecked(key == value)
+            rb.blockSignals(False)
+
+
+    # --- Button slots ---
+
+    def on_next_metric(self):
+        """
+        Add another Metric under the current Goal.
+        If you're on a goal row with empty metric, fill it; if you're already on a metric row, create a sibling metric.
+        """
+        if not hasattr(self, "mid_manager"): return
+        self._commit_sidebar_fields()
+        idx = self.mid_manager.current_index
+        row = self.mid_manager.df.iloc[idx].to_dict()
+        base = self.mid_manager.lowest_present_level(row)
+
+        # If we're on a goal row (goal present, metric empty), stay and let user type metric.
+        # If metric already present, create another metric sibling under same goal.
+        if base == "goal" and not self.mid_manager._has_val(row, "metric"):
+            # Just ensure metric editor is clear and focused
+            self._clear_field("metric")
+            return
+
+        # Otherwise, create a sibling metric: child_level='metric' clears metric only.
+        new_idx = self._insert_child_and_goto(idx, "metric")
+
+    def on_done_goal(self):
+        """
+        Finish adding metrics for this goal and move to the next seed row (next non-generated).
+        """
+        if not hasattr(self, "mid_manager"): return
+        self._commit_sidebar_fields()
+        next_seed = self.mid_manager.next_seed_row_index(self.mid_manager.current_index)
+        if next_seed is None:
+            # No more seeds; optionally show a toast/status
+            self.statusBar().showMessage("No more seed rows.")
+            return
+        self._goto_index(next_seed)
+
+    def on_next_goal(self):
+        """
+        Add another Goal under the current Objective. Creates a child goal row (goal+metric cleared).
+        """
+        if not hasattr(self, "mid_manager"): return
+        self._commit_sidebar_fields()
+        idx = self.mid_manager.current_index
+        new_idx = self._insert_child_and_goto(idx, "goal")
+
+    def on_done_obj(self):
+        """
+        Finish adding goals for this objective -> move to next seed entry.
+        """
+        if not hasattr(self, "mid_manager"): return
+        self._commit_sidebar_fields()
+        next_seed = self.mid_manager.next_seed_row_index(self.mid_manager.current_index)
+        if next_seed is None:
+            self.statusBar().showMessage("No more seed rows.")
+            return
+        self._goto_index(next_seed)
+
+    def on_next_obj(self):
+        """
+        Add another Objective under the current Strategic Objective. Clears obj+goal+metric.
+        """
+        if not hasattr(self, "mid_manager"): return
+        self._commit_sidebar_fields()
+        idx = self.mid_manager.current_index
+        new_idx = self._insert_child_and_goto(idx, "obj")
+
+    def on_done_strat(self):
+        """
+        Finish adding objectives for this strategic objective -> move to next seed entry.
+        """
+        if not hasattr(self, "mid_manager"): return
+        self._commit_sidebar_fields()
+        next_seed = self.mid_manager.next_seed_row_index(self.mid_manager.current_index)
+        if next_seed is None:
+            self.statusBar().showMessage("No more seed rows.")
+            return
+        self._goto_index(next_seed)
+
+    def load_mid_fields_from_row(self):
+        row = getattr(self, "mid_manager", None).get_current_row() if hasattr(self, "mid_manager") else None
+        if row is None:
+            for k, ed in self.mid_field_editors.items():
+                ed.clear()
+            self._set_metric_status("")
+            return
+
+        else:
+            idx = self.mid_manager.current_index
+            # flagged
+            self.chk_flag.blockSignals(True)
+            self.chk_flag.setChecked(self.mid_manager.df.at[idx, "_flag"])
+            self.chk_flag.blockSignals(False)
+            # achieved
+            self.chk_achieved.blockSignals(True)
+            self.chk_achieved.setChecked(self.mid_manager.df.at[idx, "_achieved"])
+            self.chk_achieved.blockSignals(False)
+            # future-dated
+            self.chk_future_dated.blockSignals(True)
+            self.chk_future_dated.setChecked(self.mid_manager.df.at[idx, "_future_dated"])
+            self.chk_future_dated.blockSignals(False)
+        for k, ed in self.mid_field_editors.items():
+            ed.blockSignals(True)
+            ed.setPlainText(row.get(k, "") or "")
+            ed.blockSignals(False)
+        self._set_metric_status(row.get("metric_status", "") or "")
+
+
+    def save_mid_fields_to_row(self):
+        """Write sidebar editor values back into the current MID row (in memory)."""
+        if not hasattr(self, "mid_manager") or self.mid_manager.df is None:
+            return
+        idx = self.mid_manager.current_index
+        if idx is None or idx < 0 or idx >= len(self.mid_manager.df):
+            return
+        for k, ed in self.mid_field_editors.items():
+            self.mid_manager.df.at[idx, k] = ed.toPlainText().strip()
+        self.mid_manager.df.at[idx, "_flag"] = self.chk_flag.isChecked()
+        self.mid_manager.df.at[idx, "_achieved"] = self.chk_achieved.isChecked()
+        self.mid_manager.df.at[idx, "_future_dated"] = self.chk_future_dated.isChecked()
+        self.logger.info("Saved MID sidebar field edits to current row")
+
+    def on_add_clicked(self):
+        mm = getattr(self, "mid_manager", None)
+        if not mm or mm.df is None: return
+        idx = mm.current_index
+        if idx is None: return
+
+        # Read current editor text (captures unsaved typing)
+        so_text   = self._text("stratobj")
+        obj_text  = self._text("obj")
+        goal_text = self._text("goal")
+        metr_text = self._text("metric")
+
+        row = mm.df.iloc[idx].to_dict()
+        so   = (row.get("stratobj") or "").strip()
+        obj  = (row.get("obj") or "").strip()
+        goal = (row.get("goal") or "").strip()
+        metr = (row.get("metric") or "").strip()
+        no_metrics = bool(row.get("_no_metrics", False))
+
+        # 1) Add Strategic Objective
+        if so == "":
+            if not so_text:
+                self.statusBar().showMessage("Type a Strategic Objective first.")
+                self._focus("stratobj"); return
+            self._commit_sidebar_fields()
+            mm.df.at[idx, "obj"] = ""     # keep seed row as SO header
+            mm.df.at[idx, "_gen"] = False
+            self.update_info_labels()
+            self.load_mid_fields_from_row()
+            self.refresh_expansion_controls()
+            return
+
+        # 2) Add Objective (create an Objective header row)
+        if obj == "":
+            if not obj_text:
+                self.statusBar().showMessage("Type an Objective first.")
+                self._focus("obj"); return
+            self._commit_sidebar_fields()
+            mm.df.at[idx, "obj"] = ""     # keep current row as SO header
+
+            new_row = mm.clone_for_child(idx, "goal")  # clears goal+metric
+            new_row["obj"] = obj_text
+            new_idx = mm.insert_row_after(idx, new_row)
+            self._goto_index(new_idx)
+            self._set_text("goal", "")
+            self.refresh_expansion_controls()
+            return
+
+        # 3) Add Goal (create first metric row under this goal)
+        if goal == "":
+            if not goal_text:
+                self.statusBar().showMessage("Type a Goal first.")
+                self._focus("goal"); return
+            self._commit_sidebar_fields()
+            mm.df.at[idx, "goal"] = ""    # keep current row as Objective header
+
+            new_row = mm.clone_for_child(idx, "metric")  # clears metric
+            new_row["goal"] = goal_text
+            new_idx = mm.insert_row_after(idx, new_row)
+            self._goto_index(new_idx)
+            self._set_text("metric", "")
+            self.refresh_expansion_controls()
+            return
+
+        # 4) Add Metric (commit current metric, open sibling)
+        else:
+            # goal present -> either metric stage OR terminal goal
+            if no_metrics:
+                # Treat as ‘done with goal’ – show only the Done button (optional UX)
+                self.btn_add.hide()
+                self.btn_done.setText("Done with Goal")
+                self.btn_done.show()
+                self.hint_lbl.setText("<i>This goal has no metrics. Click Done with Goal to continue.</i>")
+                return
+
+            # Normal metric stage
+            self.btn_add.setText("Add Metric")
+            self.btn_done.setText("Done with Goal")
+            self.btn_add.show(); self.btn_done.show()
+            self.hint_lbl.setText("<i>Add one or more Metrics for this Goal.</i>")
+            self._focus("metric")
+
+        self._commit_sidebar_fields()
+        sibling = mm.clone_for_child(idx, "metric")     # clears metric only
+        new_idx = mm.insert_row_after(idx, sibling)
+        self._goto_index(new_idx)
+        self._set_text("metric", "")
+        self._set_metric_status("")  # clear selection for the next metric
+        self.refresh_expansion_controls()
+
+    def on_done_clicked(self):
+        mm = getattr(self, "mid_manager", None)
+        if not mm or mm.df is None: return
+        idx = mm.current_index
+        if idx is None: return
+
+        self._commit_sidebar_fields()
+        row = mm.df.iloc[idx].to_dict()
+        so   = (row.get("stratobj") or "").strip()
+        obj  = (row.get("obj") or "").strip()
+        goal = (row.get("goal") or "").strip()
+
+        # Done with Strategic Objective (obj is blank at header)
+        if so != "" and obj == "":
+            nxt = mm.next_seed_row_index(idx)
+            if nxt is None:
+                self.statusBar().showMessage("No more seed rows.")
+                return
+            self._goto_index(nxt)
+            return
+
+        # Done with Objective -> go to SO header (same SO, obj=='')
+        if so != "" and obj != "" and goal == "":
+            parent = mm.find_parent_for_obj(idx)
+            if parent is not None:
+                self._goto_index(parent)
+                self._set_text("obj", "")   # ready for next objective
+            return
+
+        # Done with Goal -> go to OBJ header (same SO+OBJ, goal=='')
+        if so != "" and obj != "" and goal != "":
+            parent = mm.find_parent_for_goal(idx)
+            if parent is not None:
+                self._goto_index(parent)
+                self._set_text("goal", "")  # ready for next goal
+            return
+    def on_save_goal_no_metrics_clicked(self):
+        mm = getattr(self, "mid_manager", None)
+        if not mm or mm.df is None: return
+        idx = mm.current_index
+        if idx is None: return
+
+        # Read what’s currently typed
+        goal_text = self._text("goal")
+        if not goal_text:
+            self.statusBar().showMessage("Type a Goal first.")
+            self._focus("goal"); return
+
+        # Must be on an Objective header (SO+OBJ filled, goal empty)
+        row = mm.df.iloc[idx].to_dict()
+        so   = (row.get("stratobj") or "").strip()
+        obj  = (row.get("obj") or "").strip()
+        goal = (row.get("goal") or "").strip()
+        if not (so and obj and goal == ""):
+            self.statusBar().showMessage("Save Goal (no metrics) is only available when adding goals under an Objective.")
+            return
+
+        # Commit any SO/OBJ text (usually already set); keep the header unchanged
+        self._commit_sidebar_fields()
+        mm.df.at[idx, "goal"] = ""  # ensure this remains the OBJ header row
+
+        # Create a terminal goal row with no metrics
+        new_row = mm.clone_for_child(idx, "metric")  # clears metric only
+        new_row["goal"] = goal_text
+        new_row["_no_metrics"] = True   # mark as terminal goal (no metrics)
+        new_idx = mm.insert_row_after(idx, new_row)
+
+        # Return to the OBJ header ready to type the next goal
+        self._goto_index(idx)
+        self._set_text("goal", "")
+        self._set_text("metric", "")
+        self._set_metric_status("")
+        self.refresh_expansion_controls()
+        self.statusBar().showMessage("Saved goal without metrics.")
+
+    def on_flag_togggle(self, state, propogate = False):
+        mm = getattr(self, "mid_manager", None)
+        if not mm or mm.df is None: return
+        idx = mm.current_index
+        if idx is None: return
+
+        # Toggle-style: if any descendant already flagged, unflag; else flag
+        # (You can pick a simpler "always set True" if you prefer.)
+        row = mm.df.iloc[idx].to_dict()
+
+        
+        if propogate:
+            mm.propagate_flag_from_index(idx, flagged=True)
+            self.statusBar().showMessage("Flagged for review (propagated to children).")
+        else:
+            mm.df.at[mm.current_index, "_flag"] = (state == Qt.Checked)
+            self.statusBar().showMessage("Flagged for review.")
+
+        
+        # If you show flags in the table view, refresh that view here as well.
+        self.update_info_labels()
+
+    def on_achieved_toggle(self, state):
+        mm = getattr(self, "mid_manager", None)
+        if not mm or mm.df is None: return
+        idx = mm.current_index
+        if idx is None: return
+        mm.df.at[mm.current_index, "_achieved"] = (state == Qt.Checked)
+
+    def on_fd_togggle(self, state):
+        mm = getattr(self, "mid_manager", None)
+        if not mm or mm.df is None: return
+        idx = mm.current_index
+        if idx is None: return
+        mm.df.at[mm.current_index, "_future_dated"] = (state == Qt.Checked)
+
+
+
+
+
+
+
+
+
+    def _show_png_bytes_in_center(self, png_bytes: bytes):
+        pm = QPixmap()
+        pm.loadFromData(QByteArray(png_bytes), "PNG")
+        # Use your existing central image widget here; QLabel is common:
+        self.pdf_label.setPixmap(pm)
+        self.pdf_label.adjustSize()
 
 
 
