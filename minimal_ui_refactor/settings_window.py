@@ -1,6 +1,8 @@
 # SettingsDialog Class
 # This Class implements a pop-up window for the user to modify program settings. These can be written to or read from JSON.
 
+from copy import deepcopy
+
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QFormLayout, QLineEdit, QHBoxLayout, QMessageBox, QFileDialog, QComboBox, QInputDialog, QWidget
 import json
 import pandas as pd
@@ -8,14 +10,26 @@ from logger import setup_logger
 from scraping_tool_dialog import ScrapingToolDialog
 from extraction_tool_dialog import ExtractionToolDialog
 from class_dialog import ClassDialog
+from mid_schema_dialog import MIDSchemaDialog
+from checkbox_dialog import CheckboxDialog
+from module_settings_dialog import ModuleSettingsDialog
+import module_settings
+from field_button_dialog import FieldButtonDialog
 
 
 class SettingsDialog(QDialog):
-    def __init__(self, settings, parent=None):
+    def __init__(self, settings, parent=None, active_modules=(), mode="user"):
+        """``active_modules`` are the module ids currently on screen.
+
+        Outside dev mode the module settings tab shows only those; dev mode
+        shows every module the program knows about.
+        """
         super().__init__(parent)
         self.setWindowTitle("Settings")
         # Make a copy of the settings so that changes can be confirmed
-        self.settings = settings.copy()
+        self.settings = deepcopy(settings)
+        self.active_modules = tuple(active_modules)
+        self.mode = str(mode or settings.get("userMode", "User")).lower()
         self._init_ui()
 
     def _init_ui(self):
@@ -81,6 +95,15 @@ class SettingsDialog(QDialog):
                 continue
             elif key == "evaluationClasses":
                 continue
+            elif key == "midSchema":
+                continue
+            # Structured settings get dedicated editors, not raw JSON text
+            elif key == "checkboxes":
+                continue
+            elif key == "fieldButtons":
+                continue
+            elif key == module_settings.SETTINGS_KEY:
+                continue
 
             # Set up the file path editor for logfiles
             elif key == "logFileDirectory":
@@ -105,6 +128,10 @@ class SettingsDialog(QDialog):
         # Create buttons for saving, loading, and confirming changes
         button_layout = QHBoxLayout()
 
+        self.mid_schema_button = QPushButton("Configure MID Columns")
+        self.mid_schema_button.clicked.connect(self.open_mid_schema_dialog)
+        button_layout.addWidget(self.mid_schema_button)
+
         self.scraping_button = QPushButton("Set Up Scraping Tools")
         self.scraping_button.clicked.connect(self.open_scraping_tool_dialog)
         button_layout.addWidget(self.scraping_button)
@@ -116,6 +143,18 @@ class SettingsDialog(QDialog):
         self.classes_button = QPushButton("Modify Classes")
         self.classes_button.clicked.connect(self.open_class_dialog)
         button_layout.addWidget(self.classes_button)
+
+        self.checkbox_button = QPushButton("Configure Checkboxes")
+        self.checkbox_button.clicked.connect(self.open_checkbox_dialog)
+        button_layout.addWidget(self.checkbox_button)
+
+        self.field_button_button = QPushButton("Configure Field Buttons")
+        self.field_button_button.clicked.connect(self.open_field_button_dialog)
+        button_layout.addWidget(self.field_button_button)
+
+        self.module_button = QPushButton("Module Settings")
+        self.module_button.clicked.connect(self.open_module_settings_dialog)
+        button_layout.addWidget(self.module_button)
 
         self.save_button = QPushButton("Save Settings")
         self.save_button.clicked.connect(self.save_settings)
@@ -258,6 +297,56 @@ class SettingsDialog(QDialog):
                     current_default = self.settings.get("defaultScraper", "")
                     if current_default in scraper_names:
                         widget.setCurrentText(current_default)
+
+    def open_module_settings_dialog(self):
+        """Edit the settings each loaded module defines for itself."""
+        mode = self.mode
+        if "userMode" in self.inputs:
+            # Honour a mode the user has just changed but not yet applied.
+            mode = self.inputs["userMode"].currentText().lower()
+
+        dialog = ModuleSettingsDialog(
+            self.settings, self.active_modules, mode, self
+        )
+        if dialog.exec_() == QDialog.Accepted:
+            self.settings.update(dialog.updated_settings)
+            self.logger.info("Module settings updated")
+
+    def open_checkbox_dialog(self):
+        """Define the sidebar checkboxes and the MID columns they write to."""
+        dialog = CheckboxDialog(self.settings, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self.settings.update(dialog.updated_settings)
+            self.logger.info("Checkbox configuration updated")
+
+    def open_field_button_dialog(self):
+        """Define buttons that compute one editable field from the others."""
+        if "midSchema" not in self.settings:
+            QMessageBox.warning(
+                self, "Field Buttons", "Configure the MID columns first."
+            )
+            return
+        dialog = FieldButtonDialog(self.settings, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self.settings.update(dialog.updated_settings)
+            self.logger.info("Field button configuration updated")
+
+    def open_mid_schema_dialog(self):
+        """Configure identifier and editable columns from the selected MID."""
+        if "MIDLocation" in self.inputs:
+            self.settings["MIDLocation"] = self.inputs["MIDLocation"].text()
+        if "MIDSheetName" in self.inputs:
+            self.settings["MIDSheetName"] = self.inputs["MIDSheetName"].text()
+
+        try:
+            dialog = MIDSchemaDialog(self.settings, self)
+        except ValueError as exc:
+            QMessageBox.warning(self, "MID Configuration", str(exc))
+            return
+
+        if dialog.exec_() == QDialog.Accepted:
+            self.settings["midSchema"] = dialog.updated_schema.to_mapping()
+            self.logger.info("MID column configuration updated")
 
     # Creates an instance of ExtractionToolDialog for interactive tool definitions
     def open_extraction_tool_dialog(self):

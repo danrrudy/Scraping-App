@@ -1,58 +1,68 @@
-import sys
-import os
-import fitz  # PyMuPDF
-import json
-from PyQt5.QtWidgets import (
-    QApplication,
-    QMainWindow,
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
-    QTextEdit,
-    QLabel,
-    QSplitter,
-    QFileDialog,
-    QMessageBox,
-    QDialog,
-    QInputDialog,
-    QComboBox,
-    QTextBrowser,
-    QGroupBox,
-    QFormLayout,
-    QButtonGroup,
-    QRadioButton,
-    QAction,
-    QScrollArea,
-    QCheckBox,
-    QLineEdit,
-    QSpinBox,
-    QShortcut,
-)
-from PyQt5.QtCore import Qt, QByteArray, QEvent, QRegExp
-from PyQt5.QtGui import QPixmap, QImage, QKeySequence, QTextCursor, QTextCharFormat, QColor
 import base64
-from io import BytesIO
-import pandas as pd
+import json
+import os
 import re
+import sys
+from io import BytesIO
+
+import fitz  # PyMuPDF
+import pandas as pd
+from PyQt5.QtCore import QByteArray, QEvent, QRegExp, Qt
+from PyQt5.QtGui import (
+    QColor,
+    QImage,
+    QKeySequence,
+    QPixmap,
+    QTextCharFormat,
+    QTextCursor,
+)
+from PyQt5.QtWidgets import (
+    QAction,
+    QApplication,
+    QButtonGroup,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QRadioButton,
+    QScrollArea,
+    QShortcut,
+    QSizePolicy,
+    QSpinBox,
+    QSplitter,
+    QTextBrowser,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
+
+from app_settings import load_settings, save_settings
+from audit_runner import run_mid_audit
+from extractor_loader import select_extractor_class
+from image_canvas import ImageCanvas
+from logger import setup_logger
+from mid_manager import MIDManager
+from scraper_loader import select_scraper_class
 
 # local imports
-
 from settings_window import SettingsDialog
-from app_settings import load_settings, save_settings
-from mid_manager import MIDManager
-from logger import setup_logger
-from scraper_loader import select_scraper_class
-from extractor_loader import select_extractor_class 
-from audit_runner import run_mid_audit
-from image_canvas import ImageCanvas
-
 
 # Ensure project root is in sys.path
 root_dir = os.path.abspath(os.path.dirname(__file__))
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
+BASE_WIDTH = 1200
+BASE_HEIGHT = 800
 
 # TextScrapingReviewApp
 
@@ -63,14 +73,36 @@ class TextScrapingReviewApp(QMainWindow):
         self.logger = setup_logger()
         self.logger.info("Initialized Logger")
         self.setWindowTitle("Text Scraping Review App")
-        self.resize(1200, 800)
+        #        self.resize(1200, 800)
 
         self.settings = load_settings()
+
+        manual_scale = float(self.settings.get("UIScale", "1.0"))
+
+        auto_scale = self.get_screen_scale()
+
+        self.ui_scale = min(manual_scale, auto_scale)
+
+        self.logger.info(f"opening application at UI scale {self.ui_scale}")
+
+        self.resize(
+            self.scaled(BASE_WIDTH, self.ui_scale),
+            self.scaled(BASE_HEIGHT, self.ui_scale),
+        )
+
         self.mode = self.settings.get("userMode", "User").lower()
         self.mid_df = None
         self.current_mid_index = 0
-        self.use_table_view = False # Switches based on the format type of the loaded Document
-        self.edit_path = {"layer": None, "stratobj": 0, "obj": 0, "goal": 0, "metric": 0}
+        self.use_table_view = (
+            False  # Switches based on the format type of the loaded Document
+        )
+        self.edit_path = {
+            "layer": None,
+            "stratobj": 0,
+            "obj": 0,
+            "goal": 0,
+            "metric": 0,
+        }
 
         # Initiate the MID manager if settings are already set
         mid_path = self.settings.get("MIDLocation", "")
@@ -79,20 +111,20 @@ class TextScrapingReviewApp(QMainWindow):
                 self.mid_manager = MIDManager(mid_path)
                 # After loading MID DataFrame
                 for col, default in [
-                    ("classification_scheme", ""), # Scheme name per row
-                    ("metric_status", ""),   # radio selection per metric row
-                    ("target", ""),                 # Listed goal field
-                    ("actual", ""),                 # Lister performance field
-                    ("years_to_evaluation", ""),     # str or int for eval point
-                    ("_flag", False),        # flag for review
+                    ("classification_scheme", ""),  # Scheme name per row
+                    ("metric_status", ""),  # radio selection per metric row
+                    ("target", ""),  # Listed goal field
+                    ("actual", ""),  # Lister performance field
+                    ("years_to_evaluation", ""),  # str or int for eval point
+                    ("_flag", False),  # flag for review
                     ("_no_metrics", False),  # marks a goal saved without metrics
                     ("_gen", False),
                     ("_achieved", False),
                     ("_future_dated", False),
                     ("Page", ""),
-                    ("_aggregate", False),           # Indicator for aggregate goals
-                    ("reviewer_comments", ""),      # Notes field for reviewer mode
-                    ("reviewer_status", ""),      # Accept/Reject/Seen status
+                    ("_aggregate", False),  # Indicator for aggregate goals
+                    ("reviewer_comments", ""),  # Notes field for reviewer mode
+                    ("reviewer_status", ""),  # Accept/Reject/Seen status
                 ]:
                     if col not in self.mid_manager.df.columns:
                         self.mid_manager.df[col] = default
@@ -104,430 +136,63 @@ class TextScrapingReviewApp(QMainWindow):
             self.logger.warning("MID Location not specified, user alerted")
             # Notfiy the user via popup if the MID cannot be loaded
             # NOTE: This still executes at first launch, which is proabably bad form
-            QMessageBox.warning(self, "MID Location not Specified", "Please select a Master Input Document in Settings.")
+            QMessageBox.warning(
+                self,
+                "MID Location not Specified",
+                "Please select a Master Input Document in Settings.",
+            )
 
         # We keep separate lists of widgets for each mode so they can be dynamically loaded and unloaded
         # Any widget not assigned to a mode will always be shown
-        # Widgets assigned to a mode will be shown in that mode, and hidden in others 
-        self.dev_mode_widgets = []      # Superset of user mode, distinct from reviewer
-        self.user_mode_widgets = []     # Base mode, minimum useful functionality
-        self.reviewer_mode_widgets = [] # Superset of user mode, with added review functionality
+        # Widgets assigned to a mode will be shown in that mode, and hidden in others
+        self.dev_mode_widgets = []  # Superset of user mode, distinct from reviewer
+        self.user_mode_widgets = []  # Base mode, minimum useful functionality
+        self.reviewer_mode_widgets = []  # Superset of user mode, with added review functionality
 
-        self.doc = None                 # Current page
-        self.page_indices = []          # List of all zero-indexed pages recorded in the MID
-        self.current_page_index = 0     # Index of current page, not page number
-        self.current_agency_yr = None   # Agency-year field
-        self.scraped_text = ""          # Text to display in RH column
-        self.page_text_cache = []       # List of strings, each containing the text of a page
+        self.doc = None  # Current page
+        self.page_indices = []  # List of all zero-indexed pages recorded in the MID
+        self.current_page_index = 0  # Index of current page, not page number
+        self.current_agency_yr = None  # Agency-year field
+        self.scraped_text = ""  # Text to display in RH column
+        self.page_text_cache = []  # List of strings, each containing the text of a page
 
-        self.info_labels = {}           # Dictionary of info to display in UI
-        self.manual_review = {          # Structure for tracking user Accept/Rejects (will likely be changed)
+        self.info_labels = {}  # Dictionary of info to display in UI
+        self.manual_review = {  # Structure for tracking user Accept/Rejects (will likely be changed)
             "active_test": None,
             "results": {},  # format: {row_index: {"status": "ACCEPT" or "REJECT", "label": ..., "pages": [...]}}
         }
-        self.mid_field_editors = {}     #{key: QTextEdit}
+        self.mid_field_editors = {}  # {key: QTextEdit}
         self.mid_field_keys = ["stratobj", "obj", "goal", "metric"]
-
 
         self.add_level_buttons = {}
         self.expansion_state = {
-            "base_level": None,       # lowest present on the seed row (stratobj|obj|goal|metric|None)
-            "working_level": None,    # where the user is currently adding units
-            "seed_index": None,       # index of the original (non-generated) row we started from
+            "base_level": None,  # lowest present on the seed row (stratobj|obj|goal|metric|None)
+            "working_level": None,  # where the user is currently adding units
+            "seed_index": None,  # index of the original (non-generated) row we started from
         }
 
         # overlays + coords from the most recent scrape
-        self.page_overlays = {}   # {page_index: PNG bytes}
-        self.cells_by_page = {}   # {page_index: [(x0,y0,x1,y1), ...]} (for later click-to-scrape)
-        self.page_dims     = {}   # {page_index: (w_pt, h_pt)}         (for later)
-
+        self.page_overlays = {}  # {page_index: PNG bytes}
+        self.cells_by_page = {}  # {page_index: [(x0,y0,x1,y1), ...]} (for later click-to-scrape)
+        self.page_dims = {}  # {page_index: (w_pt, h_pt)}         (for later)
 
         # Set up file structure if it doesn't exist
         self.init_files()
 
         self.init_ui()
 
-
         # Attempt to load the first document
         if hasattr(self, "mid_manager") and self.mid_manager.df is not None:
             success = self.load_mid_entry_document()
             if not success:
-                self.logger.warning("First MID row failed to load; check file accessibility or page numbers.")
+                self.logger.warning(
+                    "First MID row failed to load; check file accessibility or page numbers."
+                )
             else:
                 self.logger.debug("First MID row loaded successfully")
 
-    def _pil_to_qpixmap(self, pil_img):
-        if pil_img is None:
-            self.logger.warning("image was none!")
-            return None
-        if pil_img.mode in ("RGBA", "LA"):
-            fmt = QImage.Format_RGBA8888
-            img = pil_img.convert("RGBA")
-            bpl = pil_img.width * 4
-        else:
-            fmt = QImage.Format_RGB888
-            img = pil_img.convert("RGB")
-            bpl = pil_img.width * 3
-        self.logger.debug("converted image")
-        data = img.tobytes("raw", img.mode)
-        self.logger.debug("converted to raw data")
-        qimg = QImage(data, img.width, img.height, bpl, fmt).copy()
-        return QPixmap.fromImage(qimg)
 
-    def init_ui(self):
-        self.logger.debug(f"Initializing UI in {self.mode} mode")
-
-        # Document Display Window
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        main_layout = QHBoxLayout(central_widget)
-
-        # --- Status Information Panel ---
-        info_layout = QVBoxLayout()
-
-        self.entry_index_label = QLabel("Entry 0 of 0")
-        self.entry_index_label.setStyleSheet("font-weight: bold;")
-        info_layout.addWidget(self.entry_index_label)
-
-
-        # Set information fields
-        if self.mode == "dev":
-            self.info_fields = ["File", "Format"]
-
-        else:
-            # Information fields to display
-            self.info_fields = ["File", "Agency", "Year", "Page", "Format"]
-
-
-        # Dynamically create info fields based on assignment above
-        for field in self.info_fields:
-            label = QLabel(f"{field.capitalize()}: ")
-            label.setStyleSheet("font-weight: bold;")
-            info_layout.addWidget(label)
-            self.info_labels[field.lower()] = label # set keys to lowercase version of field name
-
-        mid_fields_group = QGroupBox("Fields")
-        mid_form = QFormLayout()
-
-        labels_for = {
-            "stratobj": "stratobj",
-            "obj": "obj",
-            "goal": "goal",
-            "metric": "metric"
-        }
-
-        self._field_highlight_colors = {
-            "stratobj": QColor("#FFF2A8"),  # yellow
-            "obj":      QColor("#CFF7D3"),  # green
-            "goal":     QColor("#CFE8FF"),  # blue
-            "metric":   QColor("#FFD1DC"),  # pink
-            "target":   QColor("#E6D6FF"),  # light purple
-            "actual":   QColor("#FFE0B2"),  # light orange
-            }
-
-
-        for k in self.mid_field_keys:
-            row_widget = QWidget()
-            row_layout = QHBoxLayout(row_widget)
-            row_layout.setContentsMargins(0, 0, 0, 0)
-            row_layout.setSpacing(6)
-
-            editor = QTextEdit()
-            editor.setFixedHeight(70)
-            self.mid_field_editors[k] = editor
-
-            btn = QPushButton("+")
-            btn.setFixedWidth(26)
-            btn.setToolTip(f"Add new {k} row")
-            btn.clicked.connect(lambda _=False, kk=k: self.on_add_level_clicked(kk))
-
-            self.add_level_buttons[k] = btn
-
-            row_layout.addWidget(editor, 1)
-            row_layout.addWidget(btn, 0)
-
-            mid_form.addRow(labels_for[k] + ":", row_widget)
-
-        self.target_edit = QLineEdit()
-        self.actual_edit = QLineEdit()
-        mid_form.addRow("Target:", self.target_edit)
-        mid_form.addRow("Actual:", self.actual_edit)
-
-        mid_fields_group.setLayout(mid_form)
-        info_layout.addWidget(mid_fields_group)
-
-        # --- Metric status radios (Under the Metric editor) ---
-        scheme_row = QHBoxLayout()
-        scheme_row.setSpacing(8)
-
-        scheme_lbl = QLabel("Classification Scheme:")
-        scheme_row.addWidget(scheme_lbl)
-
-        self.class_scheme_combo = QComboBox()
-        scheme_row.addWidget(self.class_scheme_combo)
-        scheme_row.addStretch(1)
-
-        mid_form.addRow("", QWidget())
-        mid_form.addRow(scheme_row)
-
-        # Metric Status
-        metric_container = QWidget()
-        metric_vlayout = QVBoxLayout(metric_container)
-        metric_vlayout.setSpacing(4)
-        metric_vlayout.setContentsMargins(0, 0, 0, 0)
-
-        metric_lbl = QLabel("Metric Status:")
-        metric_vlayout.addWidget(metric_lbl)
-
-        self.metric_status_group = QButtonGroup(self)  # keeps exclusivity
-        self.metric_status_buttons = {}  # key -> QRadioButton
-        self.metric_status_container = QWidget()
-        self.metric_status_layout = QHBoxLayout(self.metric_status_container)
-        self.metric_status_layout.setSpacing(8)
-        self.metric_status_layout.setContentsMargins(0, 0, 0, 0)
-
-        metric_vlayout.addWidget(self.metric_status_container)
-
-        # put the status row right below the metric QTextEdit
-        mid_form.addRow("", QWidget())  # tiny spacer line
-        mid_form.addRow(metric_container)
-
-
-        # Detect change in scheme
-        self.class_scheme_combo.currentTextChanged.connect(self.on_scheme_changed)
-        # Populate corresponding buttons
-        self._refresh_class_schemes_from_settings()
-
-
-        # --- Action buttons under the status radios ---
-        actions_row = QHBoxLayout()
-        self.chk_flag = QCheckBox("Flag for review")
-        self.chk_aggregate = QCheckBox("Aggregate")
-        self.chk_achieved = QCheckBox("Achieved")
-        self.chk_future_dated = QCheckBox("Future-Dated")
-        self.years_to_eval_spin = QSpinBox()
-        self.years_to_eval_spin.setRange(0,20)                  # arbitrary, would be shocked if any are greater than 20
-        self.years_to_eval_spin.setSpecialValueText("")
-        self.years_to_eval_spin.setEnabled(False)
-        self.years_to_eval_spin.setFixedWidth(60)
-
-        years_lbl = QLabel("Years to eval:")
-
-        self.chk_flag.stateChanged.connect(self.on_flag_togggle)
-        self.chk_aggregate.stateChanged.connect(self.on_agg_togggle)
-        self.chk_achieved.stateChanged.connect(self.on_achieved_toggle)
-        self.chk_future_dated.stateChanged.connect(self.on_fd_togggle)
-        self.years_to_eval_spin.valueChanged.connect(self.on_years_to_eval_changed)
-
-        # Notes field
-        notes_container = QHBoxLayout()
-        user_mode_notes_lbl = "Notes:"
-        reviewer_mode_notes_lbl = "User Notes:"
-        if self.mode.lower() == "reviewer":
-            original_notes_lbl = reviewer_mode_notes_lbl
-        else:
-            original_notes_lbl = user_mode_notes_lbl
-        self.notes_lbl = QLabel(original_notes_lbl)
-        self.notes = QLineEdit()
-        notes_container.addWidget(self.notes_lbl)
-        notes_container.addWidget(self.notes)
-
-
-        actions_row.addWidget(self.chk_flag)
-        self.chk_flag.setShortcut("Ctrl+F")
-        actions_row.addWidget(self.chk_aggregate)
-        actions_row.addWidget(self.chk_achieved)
-        actions_row.addWidget(self.chk_future_dated)
-        actions_row.addWidget(years_lbl)
-        actions_row.addWidget(self.years_to_eval_spin)
-        mid_form.addRow(actions_row)
-
-        mid_form.addRow(notes_container)
-        
-
-
-        # Reviewer Mode Group
-
-        self.reviewer_group = QGroupBox("Reviewer Tools")
-        reviewer_layout = QVBoxLayout()
-        reviewer_notes_container = QHBoxLayout()
-        reviewer_notes_lbl = "Reviewer Notes:"
-
-        self.reviewer_notes_lbl = QLabel(reviewer_notes_lbl)
-        self.reviewer_notes = QLineEdit()
-        reviewer_notes_container.addWidget(self.reviewer_notes_lbl)
-        reviewer_notes_container.addWidget(self.reviewer_notes)
-
-        reviewer_layout.addLayout(reviewer_notes_container)
-
-        self.hint_lbl = QLabel("")
-        self.hint_lbl.setWordWrap(True)
-        reviewer_layout.addWidget(self.hint_lbl)
-
-        # Reviewer mode buttons
-        reviewer_mode_buttons = QHBoxLayout()
-        self.btn_accept = QPushButton("Accept")  
-        self.btn_reject = QPushButton("Reject")
-
-        self.btn_accept.clicked.connect(self.accept_scrape)
-        self.btn_reject.clicked.connect(self.reject_scrape)
-
-        reviewer_mode_buttons.addWidget(self.btn_accept)
-        reviewer_mode_buttons.addWidget(self.btn_reject)
-        reviewer_layout.addLayout(reviewer_mode_buttons)
-
-        self.reviewer_group.setLayout(reviewer_layout)
-        info_layout.addWidget(self.reviewer_group)
-        self.reviewer_mode_widgets.append(self.reviewer_group)
-
-
-
-
-
-        # --- Control Panel ---
-        # Menu action
-        save_mid_act = QAction("Save MID…", self)
-        save_mid_act.triggered.connect(self.save_mid_to_file)
-        self.menuBar().addMenu("&File").addAction(save_mid_act)
-        save_mid_act.setShortcut("Ctrl+S")
-
-        control_layout = QVBoxLayout()
-
-        prev_btn = QPushButton("Previous Page")
-        prev_btn.clicked.connect(self.prev_page)
-        control_layout.addWidget(prev_btn)
-        self.logger.debug("Added Previous Page button")
-
-        next_btn = QPushButton("Next Page")
-        next_btn.clicked.connect(self.next_page)
-        control_layout.addWidget(next_btn)
-        self.logger.debug("Added Next Page button")
-
-        next_entry_btn = QPushButton("Next MID Entry")
-        next_entry_btn.clicked.connect(self.next_mid_entry)
-        control_layout.addWidget(next_entry_btn)
-        next_entry_btn.setShortcut("Ctrl+Right")
-        self.logger.debug("Added Next MID Entry button")
-
-        prev_entry_btn = QPushButton("Previous MID Entry")
-        prev_entry_btn.clicked.connect(self.prev_mid_entry)
-        control_layout.addWidget(prev_entry_btn)
-        next_entry_btn.setShortcut("Ctrl+Left")
-        self.logger.debug("Added Previous MID Entry button")
-
-        select_entry_btn = QPushButton("Jump to MID Entry...")
-        select_entry_btn.clicked.connect(self.select_mid_entry)
-        control_layout.addWidget(select_entry_btn)
-        next_entry_btn.setShortcut("Ctrl+O")
-        self.logger.debug("Added Select MID Entry button")
-
-        delete_btn = QPushButton("Delete this MID Entry")
-        delete_btn.clicked.connect(self.delete_mid_entry)
-        control_layout.addWidget(delete_btn)
-        self.user_mode_widgets.append(delete_btn)
-        self.dev_mode_widgets.append(delete_btn)
-
-        copy_btn = QPushButton("Copy Previous Year")
-        copy_btn.clicked.connect(self.duplicate_prior_year)
-        control_layout.addWidget(copy_btn)
-        self.user_mode_widgets.append(copy_btn)
-        self.dev_mode_widgets.append(copy_btn) 
-
-        settings_btn = QPushButton("Settings")
-        settings_btn.clicked.connect(self.open_settings)
-        control_layout.addWidget(settings_btn)
-        self.logger.debug("Added Settings button")
-
-        audit_btn = QPushButton("Run MID Audit")
-        audit_btn.clicked.connect(self.run_mid_audit)
-        control_layout.addWidget(audit_btn)
-        self.dev_mode_widgets.append(audit_btn)
-        self.logger.debug("Added Audit button")
-
-
-        # Dev mode feature to review test failures, will need to dynamically load test names later
-        # This field is the drop-down to select the test
-        self.failure_test_combo = QComboBox()
-        if self.mode.lower() == "dev":
-            self.failure_test_combo.addItems([
-                "table_detected", "text_scraped", "goal_match", "obj_match",
-                "keyword_match", "stratobj_match", "pages_parsed", "pdf_found", "_flag", "no_status", "no_t/a", "none"
-            ])
-        elif self.mode.lower() == "reviewer":
-            self.failure_test_combo.addItems([
-                "_flag", "_gen", "none"
-            ])
-
-        failures_label = QLabel("Restrict to:")
-        control_layout.addWidget(failures_label)
-        control_layout.addWidget(self.failure_test_combo)
-        self.dev_mode_widgets.append(self.failure_test_combo)
-        self.reviewer_mode_widgets.append(self.failure_test_combo)
-        self.dev_mode_widgets.append(failures_label)
-        self.reviewer_mode_widgets.append(failures_label)
-
-        # Restrict the MID entries to only those that failed the selected test
-        load_failures_btn = QPushButton("Load Cases")
-        load_failures_btn.clicked.connect(self.handle_load_failures)
-        control_layout.addWidget(load_failures_btn)
-        self.dev_mode_widgets.append(load_failures_btn)
-        self.reviewer_mode_widgets.append(load_failures_btn)
-
-        export_review_btn = QPushButton("Export Review Results")
-        export_review_btn.clicked.connect(self.export_review_results)
-        control_layout.addWidget(export_review_btn)
-        self.dev_mode_widgets.append(export_review_btn)
-
-
-        # Fill empty space
-        control_layout.addStretch()
-        side_panel = QVBoxLayout()
-        side_panel.addLayout(info_layout)
-        side_panel.addLayout(control_layout)
-        main_layout.addLayout(side_panel, 1)
-        self.logger.debug("Created Side Panel")
-
-        # --- Viewer Panel ---
-        splitter = QSplitter(Qt.Horizontal)
-        # PDF Page Display
-        self.pdf_label = QLabel("Load a document to begin.")
-        self.pdf_label.setAlignment(Qt.AlignCenter)
-        splitter.addWidget(self.pdf_label)
-
-        # Scraped Text Display
-        self.text_edit = QTextEdit()
-        self.text_edit.setReadOnly(True) 
-        self.text_edit.setTextInteractionFlags(
-            Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard
-        )
-        self.text_edit.setUndoRedoEnabled(False)
-        self.text_edit.show()
-        splitter.addWidget(self.text_edit)
-        self.text_edit.setVisible(True)
-
-        # Image viewer & mouse tracker
-        self.image_canvas = ImageCanvas(self, enable_zoom=True)
-        # self.image_canvas.show()
-        # self.image_canvas.pointClicked.connect(self._on_table_image_click)  # define handler below
-        # splitter.addWidget(self.image_canvas)
-
-
-        # # Table structured display
-        self.table_viewer = QTextBrowser()
-        # splitter.addWidget(self.table_viewer)
-        # self.dev_mode_widgets.append(self.table_viewer)
-        # # self.table_viewer.show()
-
-        splitter.setStretchFactor(0, 3)
-        splitter.setStretchFactor(1, 2)
-        main_layout.addWidget(splitter, 4)
-
-        self._setup_shortcuts()
-        self.installEventFilter(self)
-
-        # hide the dev mode labels if in user mode and v.v.
-        self.update_mode_ui()
-
+   
     # Create Necessary File Structure
     def init_files(self):
         # Check if the "./data" directory exists; if not, create it
@@ -542,7 +207,9 @@ class TextScrapingReviewApp(QMainWindow):
                 self.logger.info("Created ./data directory for input files")
             except Exception as e:
                 self.logger.error("Failed to Create ./data! Files will not be loaded!")
-                QMessageBox.critical(self, "Error", f"Failed to create data directory:\n{e}")
+                QMessageBox.critical(
+                    self, "Error", f"Failed to create data directory:\n{e}"
+                )
                 return
 
         # Stage 1 accepted directory
@@ -559,7 +226,7 @@ class TextScrapingReviewApp(QMainWindow):
                 os.makedirs(self.formatted_dir)
             except Exception as e:
                 self.logger.error("Failed to Create ./data/accepted/formatted!")
-        
+
         # Stage 1 rejected directory
         if not os.path.exists(self.reject_dir):
             self.logger.info("./data/rejected does not exist, creating")
@@ -570,67 +237,7 @@ class TextScrapingReviewApp(QMainWindow):
 
         # TODO: Consolodate this and other file management functions into a utils library
 
-    # Update read-only information for user
-    def update_info_labels(self):
-        self.logger.debug("Updating info labels")
-        page_num = self.page_indices[self.current_page_index] + 1 if self.page_indices else self.current_page_index + 1
-        row = None
-        mid_length = len(self.mid_manager.view_indices)
-        row = self.mid_manager.get_current_row()
-        current_mid_index = self.mid_manager.current_index
-
-        # Display the current MID index and the total number of rows
-        if row is not None:
-            if hasattr(self, "entry_index_label"):
-                self.entry_index_label.setText(
-                    f"Entry {current_mid_index + 1:,} of {mid_length:,}"
-                )
-            current_format_type = row.get("Format_Type_Updated", "")
-
-        # Map variables to their display lables manually if they are not the same
-        for key, label in self.info_labels.items():
-            if key == "page":
-                value = page_num
-            elif key == "file":
-                value = self.current_agency_yr
-            elif key == "format":
-                value = current_format_type
-            elif key in row:
-                value = row[key]
-            else:
-                value = "N/A"
-            label.setText(f"{key.capitalize()}: {value}")
-
-    def update_mode_ui(self):
-        # Cache mode in case of race conditions
-        mode = self.mode.lower()
-        self.logger.info(f"updating UI for {mode} mode")
-
-        match mode:
-            # always set the current mode last in case any widget is a member of multiple lists
-            case "dev":
-                for widget in self.user_mode_widgets:
-                    widget.setVisible(False)
-                for widget in self.reviewer_mode_widgets:
-                    widget.setVisible(False)
-                for widget in self.dev_mode_widgets:
-                    widget.setVisible(True)
-            case "user":
-                for widget in self.dev_mode_widgets:
-                    widget.setVisible(False)
-                for widget in self.reviewer_mode_widgets:
-                    widget.setVisible(False)
-                for widget in self.user_mode_widgets:
-                    widget.setVisible(True)
-            case "reviewer":
-                for widget in self.user_mode_widgets:
-                    widget.setVisible(False)
-                for widget in self.dev_mode_widgets:
-                    widget.setVisible(False)
-                for widget in self.reviewer_mode_widgets:
-                    widget.setVisible(True)
-
-
+   
     # Actual document loading based on MID entry
     def load_mid_entry_document(self):
         row = self.mid_manager.get_current_row()
@@ -645,7 +252,7 @@ class TextScrapingReviewApp(QMainWindow):
         focus_page = row.get("Page", None)
 
         if hasattr(self, "current_agency_yr") and self.current_agency_yr != agency_yr:
-            self.current_page_index=0
+            self.current_page_index = 0
 
         label = f"{agency} ({year})"
 
@@ -657,18 +264,22 @@ class TextScrapingReviewApp(QMainWindow):
 
         # Load the file
         # Handle any hyphen-underscore mixups
-        filename = f"{agency_yr.replace('-','_')}.pdf"
+        filename = f"{agency_yr.replace('-', '_')}.pdf"
         path = os.path.join(self.settings.get("dataDirectory", ""), filename)
 
         if not os.path.isfile(path):
-            self.logger.error(f"PDF not found for MID row {label} - expected file: {filename}")
+            self.logger.error(
+                f"PDF not found for MID row {label} - expected file: {filename}"
+            )
             return False
         try:
             self.doc = fitz.open(path)
             self.page_indices = self.mid_manager.parse_pdf_pages()
 
             if not self.page_indices:
-                self.logger.error(f"No valid pages found for {label} - PDF Page number field: '{row.get('PDF Page Number', '')}' ")
+                self.logger.error(
+                    f"No valid pages found for {label} - PDF Page number field: '{row.get('PDF Page Number', '')}' "
+                )
                 return False
 
             self.page_text_cache = [""] * len(self.page_indices)
@@ -676,11 +287,17 @@ class TextScrapingReviewApp(QMainWindow):
             if focus_page is not None:
                 try:
                     page_number = int(focus_page)
-                    if page_number > 0 and page_number < max(self.page_indices)+2:
-                        self.current_page_index = self.page_indices.index(page_number - 1)
-                        self.logger.info(f"Set current page index to {self.current_page_index} based on MID Page field")
+                    if page_number > 0 and page_number < max(self.page_indices) + 2:
+                        self.current_page_index = self.page_indices.index(
+                            page_number - 1
+                        )
+                        self.logger.info(
+                            f"Set current page index to {self.current_page_index} based on MID Page field"
+                        )
                 except ValueError:
-                    self.logger.warning(f"Invalid Page field in MID for {label}: '{focus_page}'")
+                    self.logger.warning(
+                        f"Invalid Page field in MID for {label}: '{focus_page}'"
+                    )
                     self.current_page_index = 0
 
             try:
@@ -691,31 +308,38 @@ class TextScrapingReviewApp(QMainWindow):
                 Scraper.scrape()
                 result = Scraper.result
                 self.logger.info("got scraper result!")
-                self.current_scrape_result = result or {}               
-
+                self.current_scrape_result = result or {}
 
                 # Image viewer
                 if str(result.get("format", "")).lower() == "image":
                     self.logger.debug("using image format")
-                    result_pages = result.get("result",[]) or []
+                    result_pages = result.get("result", []) or []
                     self._page_table_images = []
                     for local_idx, _pdf_idx in enumerate(self.page_indices):
                         self.logger.debug("iter page")
-                        tables = result_pages[local_idx] if local_idx < len(result_pages) else []
+                        tables = (
+                            result_pages[local_idx]
+                            if local_idx < len(result_pages)
+                            else []
+                        )
                         pil_img = tables[0].get("table_image") if tables else None
                         self._page_table_images.append(pil_img)
 
                     img = self._page_table_images[self.current_page_index]
                     self.logger.debug("got image")
-                    qpix = self._pil_to_qpixmap(img) if img is not None else None   
+                    qpix = self._pil_to_qpixmap(img) if img is not None else None
                     self.logger.debug("converted to qpixmap")
                     if qpix is not None:
-                        self.image_canvas.set_image(qpix, meta = {"page": self.current_page_index, "table": 0}, fit = True)
-                        self.image_canvas.show() 
+                        self.image_canvas.set_image(
+                            qpix,
+                            meta={"page": self.current_page_index, "table": 0},
+                            fit=True,
+                        )
+                        self.image_canvas.show()
                         # if hasattr(self, "text_edit"): self.text_edit.hide()
                         self.logger.debug("displayed")
                     # #switch to HTML viewer
-                    # self.use_table_view = True 
+                    # self.use_table_view = True
                     # self.text_edit.setVisible(False)
                     self.image_canvas.setVisible(True)
                     text_result = []
@@ -724,14 +348,15 @@ class TextScrapingReviewApp(QMainWindow):
                 else:
                     text_result = result.get("text")
                     self.page_text_cache = text_result
-                    self.text_edit.setPlainText(self.page_text_cache[self.current_page_index])
-                    
+                    self.text_edit.setPlainText(
+                        self.page_text_cache[self.current_page_index]
+                    )
+
                     self.logger.debug("showing text editor")
                     self.image_canvas.setVisible(False)
                     self.image_canvas.hide()
                     self.text_edit.setVisible(True)
                     self.text_edit.show()
-
 
                 if not isinstance(text_result, list):
                     raise ValueError("Expected a list of strings from the Scraper!")
@@ -739,10 +364,13 @@ class TextScrapingReviewApp(QMainWindow):
             except Exception as e:
                 self.logger.error(f"Failed to scrape all pages for {label}: {e}")
 
-
             # Decide which right-hand widget to show
-            is_image = str(self.current_scrape_result.get("format","")).lower() == "image"
-            self.use_table_view = is_image or (self.use_table_view)  # image implies table_view
+            is_image = (
+                str(self.current_scrape_result.get("format", "")).lower() == "image"
+            )
+            self.use_table_view = is_image or (
+                self.use_table_view
+            )  # image implies table_view
 
             self.show_page()
             self.load_mid_fields_from_row()
@@ -753,112 +381,30 @@ class TextScrapingReviewApp(QMainWindow):
             self.logger.error(f"Error loading {filename} for {label}: {e}")
             return False
 
-
-    def show_page(self):
-        self.logger.debug("Attempting to display a new document page")
-        if not self.doc:
-            self.logger.warning("Could not load document!")
-            return
-        if self.page_indices:
-            page_number = self.page_indices[self.current_page_index]
-        else:
-            self.logger.warning("No page reference found, defaulting to page 1!")
-            page_number = self.current_page_index
-
-        p = self.current_page_index
-
-        # prefer overlay for this page if we have one
-        overlay_png = None
-
-        # 1) direct per-page map
-        if getattr(self, "page_overlays", None):
-            overlay_png = self.page_overlays.get(p)
-
-        # 2) compatibility: allow overlay inside result["pages"][i]["overlay_image"]
-        if overlay_png is None and getattr(self, "current_scrape_result", None):
-            pages = self.current_scrape_result.get("pages") or []
-            for it in pages:
-                if it.get("page_index") == p and it.get("overlay_image"):
-                    overlay_png = it["overlay_image"]
-                    break
-
-        if overlay_png:
-            self._show_png_bytes_in_center(overlay_png)
-            self.update_info_labels()   # keep your normal UI refresh
-            return
-
-        else:
-
-            self.logger.debug(f"Attempting to load index {self.current_page_index}, page {page_number}")
-            page = self.doc.load_page(page_number)
-
-            # Render the page and upscale by 2x
-            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
-            img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888).copy()
-            pixmap = QPixmap.fromImage(img)
-            self.pdf_label.setPixmap(
-                pixmap.scaled(self.pdf_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            )
-
-            text_content = self.page_text_cache[self.current_page_index]
-
-            if 0 <= self.current_page_index < len(self.page_text_cache):
-                self.text_edit.setPlainText(self.page_text_cache[self.current_page_index])
-                self.highlight_sidebar_matches()
-            else:
-                self.text_edit.clear()
-
-        # Display document information
-        self.update_info_labels()
-
-    # Simple UI update function when the window size is changed
-    def resizeEvent(self, event):
-        self.logger.debug("Window resized")
-        super().resizeEvent(event)
-        self.show_page()
-
-    # Advances to next page and scrapes it
-    def next_page(self):
-        self.logger.debug("Attempting to load next page")
-        if self.page_indices and self.current_page_index < len(self.page_indices) - 1:
-            if not self.use_table_view:
-                self.page_text_cache[self.current_page_index] = self.text_edit.toPlainText()
-            else:
-                self.page_text_cache[self.current_page_index] = self.table_viewer.toHtml()
-            self.logger.debug("Next page is valid")
-            self.current_page_index += 1
-            self.show_page()
-        else:
-            self.logger.warning("Attempted to load invalid page")
-
-    # Moves to previous page and attempts to scrape it
-    def prev_page(self):
-        self.logger.debug("Attempting to load previous page")
-        if self.page_indices and self.current_page_index > 0:
-            self.page_text_cache[self.current_page_index] = self.text_edit.toPlainText()
-            self.logger.debug("Previous page is valid")
-            self.current_page_index -= 1
-            self.show_page()
-        else:
-            self.logger.warning("Attempted to load invalid page")
-
-
     # This and reject both cover different use cases depending on the mode
     def accept_scrape(self):
         if self.mode == "dev":
             if self.manual_review["active_test"]:
                 idx = self.mid_manager.current_index
                 row = self.mid_manager.get_current_row()
-                pages = [self.page_indices[self.current_page_index]] if self.page_indices else []
+                pages = (
+                    [self.page_indices[self.current_page_index]]
+                    if self.page_indices
+                    else []
+                )
                 self.manual_review["results"][idx] = {
                     "status": "ACCEPT",
                     "label": row.get("agency_yr", f"Index {idx}"),
-                    "pages": pages
+                    "pages": pages,
                 }
                 self.logger.info(f"Manually accepted row {idx}")
             # User is not reviewing a test
             else:
-                QMessageBox.warning(self, "Accept", "No active test! Switch to user mode to review scraping results or select a test")
+                QMessageBox.warning(
+                    self,
+                    "Accept",
+                    "No active test! Switch to user mode to review scraping results or select a test",
+                )
         elif self.mode.lower() == "reviewer":
             mm = getattr(self, "mid_manager", None)
             if mm is not None:
@@ -866,22 +412,20 @@ class TextScrapingReviewApp(QMainWindow):
                 row = mm.get_current_row()
                 agency_yr = row.get("agency_yr", f"Index {idx}")
                 notes = self.reviewer_notes.text().strip()
-                review_record = {
-                    "status": "ACCEPT",
-                    "label": agency_yr,
-                    "notes": notes
-                }
-                self.logger.info(f"Reviewer accepted row {idx} ({agency_yr}) with notes: {notes}")
-                self.mid_manager.set_value(idx, "reviewer_status","ACCEPT") 
+                review_record = {"status": "ACCEPT", "label": agency_yr, "notes": notes}
+                self.logger.info(
+                    f"Reviewer accepted row {idx} ({agency_yr}) with notes: {notes}"
+                )
+                self.mid_manager.set_value(idx, "reviewer_status", "ACCEPT")
                 # Here you would typically save the review_record to a database or file.
 
         # User is in User mode
         else:
             if self.doc:
-                agency_yr = self.current_agency_yr.replace("-","_")
+                agency_yr = self.current_agency_yr.replace("-", "_")
                 output_path = os.path.join(self.accept_dir, f"{agency_yr}_full.txt")
                 full_text = "\n\n".join(self.page_text_cache)
-                with open(output_path, "w", encoding = "utf-8") as f:
+                with open(output_path, "w", encoding="utf-8") as f:
                     # use the contents of the text edit window in case the user made manual edits
                     f.write(full_text)
                 self.logger.info(f"Saved accepted scrape to {output_path}")
@@ -890,22 +434,29 @@ class TextScrapingReviewApp(QMainWindow):
         self._commit_sidebar_fields()
         self.next_mid_entry()
 
-
     def reject_scrape(self):
         if self.mode == "dev":
             if self.manual_review["active_test"]:
                 idx = self.mid_manager.current_index
                 row = self.mid_manager.get_current_row()
-                pages = [self.page_indices[self.current_page_index]] if self.page_indices else []
+                pages = (
+                    [self.page_indices[self.current_page_index]]
+                    if self.page_indices
+                    else []
+                )
                 self.manual_review["results"][idx] = {
                     "status": "REJECT",
                     "label": row.get("agency_yr", f"Index {idx}"),
-                    "pages": pages
+                    "pages": pages,
                 }
                 self.logger.info(f"Manually rejected row {idx}")
                 self.next_mid_entry()
             else:
-                QMessageBox.warning(self, "Reject", "No active test! Switch to user mode to review scraping results or select a test")
+                QMessageBox.warning(
+                    self,
+                    "Reject",
+                    "No active test! Switch to user mode to review scraping results or select a test",
+                )
         elif self.mode.lower() == "reviewer":
             mm = getattr(self, "mid_manager", None)
             if mm is not None:
@@ -913,28 +464,23 @@ class TextScrapingReviewApp(QMainWindow):
                 row = mm.get_current_row()
                 agency_yr = row.get("agency_yr", f"Index {idx}")
                 notes = self.reviewer_notes.text().strip()
-                review_record = {
-                    "status": "REJECT",
-                    "label": agency_yr,
-                    "notes": notes
-                }
+                review_record = {"status": "REJECT", "label": agency_yr, "notes": notes}
                 self.chk_flag.setChecked(True)
-                self.logger.info(f"Reviewer rejected row {idx} ({agency_yr}) with notes: {notes}")
+                self.logger.info(
+                    f"Reviewer rejected row {idx} ({agency_yr}) with notes: {notes}"
+                )
                 # Here you would typically save the review_record to a database or file.
                 self.mid_manager.set_value(idx, "reviewer_status", "REJECT")
             self.next_mid_entry()
         # User Mode:
         else:
             if self.doc:
-                agency_yr = self.current_agency_yr.replace("-","_")
+                agency_yr = self.current_agency_yr.replace("-", "_")
                 output_path = os.path.join(self.reject_dir, f"{agency_yr}_full.txt")
                 full_text = "\n\n".join(self.page_text_cache)
-                with open(output_path, "w", encoding = "utf-8") as f:
+                with open(output_path, "w", encoding="utf-8") as f:
                     f.write(full_text)
                 self.logger.info(f"Saved rejected scrape to {output_path}")
-
-
-
 
     # Move to the next entry without any output
     def next_mid_entry(self):
@@ -951,12 +497,20 @@ class TextScrapingReviewApp(QMainWindow):
     # Move to specified MID entry
     def select_mid_entry(self):
         self._commit_sidebar_fields()
-        num, ok = QInputDialog.getInt(self, "Jump to MID Entry", "num", min = 1, max=len(self.mid_manager.df), step=1)
-        if not ok: return
+        num, ok = QInputDialog.getInt(
+            self,
+            "Jump to MID Entry",
+            "num",
+            min=1,
+            max=len(self.mid_manager.df),
+            step=1,
+        )
+        if not ok:
+            return
         if num < 1 or num > len(self.mid_manager.df):
             QMessageBox.warning("Out of range!")
             return
-        self.mid_manager.select_mid_entry(num-1)
+        self.mid_manager.select_mid_entry(num - 1)
         self.load_mid_entry_document()
         self.update_info_labels()
         self.show_page()
@@ -973,18 +527,22 @@ class TextScrapingReviewApp(QMainWindow):
             self,
             "Confirm Deletion",
             "Are you sure you want to delete the current MID entry?",
-            QMessageBox.Yes | QMessageBox.No
+            QMessageBox.Yes | QMessageBox.No,
         )
 
         if confirmation == QMessageBox.Yes:
             try:
                 self.mid_manager.delete_current_row()
-                self.logger.info(f"MID entry {self.current_mid_index} deleted successfully.")
+                self.logger.info(
+                    f"MID entry {self.current_mid_index} deleted successfully."
+                )
                 self.load_mid_entry_document()
                 self.update_info_labels()
                 self.show_page()
             except Exception as e:
-                self.logger.error(f"Failed to delete MID entry {self.current_mid_index}: {e}")
+                self.logger.error(
+                    f"Failed to delete MID entry {self.current_mid_index}: {e}"
+                )
 
     def duplicate_prior_year(self):
         row = self.mid_manager.get_current_row()
@@ -1000,13 +558,17 @@ class TextScrapingReviewApp(QMainWindow):
                 self.mid_manager.prev_mid_entry()
 
             if self.mid_manager.get_current_row() is None:
-                self.logger.warning("Reached end of MID entries with no valid document found")
-                QMessageBox.warning(self, "No More Entries", "No further valid documents were found")
+                self.logger.warning(
+                    "Reached end of MID entries with no valid document found"
+                )
+                QMessageBox.warning(
+                    self, "No More Entries", "No further valid documents were found"
+                )
                 break
 
             row = self.mid_manager.get_current_row()
             format_type = int(row.get("Format_Type_Updated", -1))
-            #if(format_type not in [19, 20, 21, 22, 23]):
+            # if(format_type not in [19, 20, 21, 22, 23]):
             #    continue
             success = self.load_mid_entry_document()
             if success:
@@ -1014,7 +576,9 @@ class TextScrapingReviewApp(QMainWindow):
                 break
             else:
                 current_index = self.mid_manager.current_index
-                self.logger.warning(f"Skipping invalid MID entry at index {current_index}")
+                self.logger.warning(
+                    f"Skipping invalid MID entry at index {current_index}"
+                )
 
     # Creates an instance of SettingsWindow for user to update settings
     def open_settings(self):
@@ -1042,25 +606,37 @@ class TextScrapingReviewApp(QMainWindow):
             new_sheet_name = self.settings.get("MIDSheetName", 0)
 
             old_mid_path = old_mid_path or ""
-            old_sheet_name = self.settings.get("MIDSheetName", 0)  # NOTE: see below for better old capture
+            old_sheet_name = self.settings.get(
+                "MIDSheetName", 0
+            )  # NOTE: see below for better old capture
             # Better: capture old_sheet_name BEFORE dialog (recommended), see next snippet.
 
             if not new_mid_path:
-                QMessageBox.critical(self, "Missing MID", "You must select a MID to use the app!")
+                QMessageBox.critical(
+                    self, "Missing MID", "You must select a MID to use the app!"
+                )
                 self.logger.error("User did not select a MID")
                 return
 
             # Determine whether the MID source changed (path or sheet)
-            mid_changed = (new_mid_path != old_mid_path) or (str(new_sheet_name) != str(old_sheet_name))
+            mid_changed = (new_mid_path != old_mid_path) or (
+                str(new_sheet_name) != str(old_sheet_name)
+            )
 
             if mid_changed:
                 self.logger.info("MID location/sheet changed; reloading MID")
 
                 try:
                     # Reconstruct only when necessary
-                    self.mid_manager = MIDManager(new_mid_path, sheet_name=new_sheet_name)
+                    self.mid_manager = MIDManager(
+                        new_mid_path, sheet_name=new_sheet_name
+                    )
 
-                    QMessageBox.information(self, "MID Reloaded", "Master Input Document Loaded Successfully")
+                    QMessageBox.information(
+                        self,
+                        "MID Reloaded",
+                        "Master Input Document Loaded Successfully",
+                    )
 
                     summary = (
                         f"MID loaded successfully.\n\n"
@@ -1079,19 +655,27 @@ class TextScrapingReviewApp(QMainWindow):
                         self.mid_manager.df = old_mid_df
                     self.logger.critical(f"Error Loading MID: {e}")
                     self.logger.warning("Previous MID State Recovered")
-                    QMessageBox.critical(self, "Error Loading MID", f"Previous MID state restored.\n\n{str(e)}")
+                    QMessageBox.critical(
+                        self,
+                        "Error Loading MID",
+                        f"Previous MID state restored.\n\n{str(e)}",
+                    )
             else:
                 # MID unchanged; do NOT reconstruct MIDManager (preserves current_index)
-                self.logger.debug("MID unchanged; preserving current MIDManager/current_index")
-
-
+                self.logger.debug(
+                    "MID unchanged; preserving current MIDManager/current_index"
+                )
 
     # runs the suite of MID audit functions defined in audit_runner.py
     def run_mid_audit(self):
         self.logger.info("Starting MID Audit")
         try:
             output_path = run_mid_audit(self.mid_manager, self.settings)
-            QMessageBox.information(self, "Audit Complete", f"Audit Complete! Output saved to:\n{output_path}")
+            QMessageBox.information(
+                self,
+                "Audit Complete",
+                f"Audit Complete! Output saved to:\n{output_path}",
+            )
         except Exception as e:
             self.logger.critical(f"AUDIT FAILED: {e}")
             QMessageBox.critical(self, "Audit Error", str(e))
@@ -1102,9 +686,8 @@ class TextScrapingReviewApp(QMainWindow):
             test_name = self.failure_test_combo.currentText()
             self.load_audit_failures(test_name)
         elif self.mode.lower() == "reviewer":
-            condition = self.failure_test_combo.currentText()
-            self.restrict_for_reviewer(condition)
-
+            test_name = self.failure_test_combo.currentText()
+            self.restrict_for_reviewer(test_name)
 
     def load_audit_failures(self, test_name="text_scraped"):
         """
@@ -1121,7 +704,11 @@ class TextScrapingReviewApp(QMainWindow):
         to rows where that test == "FAIL".
         """
         try:
-            if not hasattr(self, "mid_manager") or self.mid_manager.df is None or self.mid_manager.df.empty:
+            if (
+                not hasattr(self, "mid_manager")
+                or self.mid_manager.df is None
+                or self.mid_manager.df.empty
+            ):
                 QMessageBox.information(self, "No MID", "No MID is currently loaded.")
                 return
 
@@ -1137,7 +724,7 @@ class TextScrapingReviewApp(QMainWindow):
             # -------------------------
             # Special “column-based” restrictions
             # -------------------------
-            special = {"_flag", "_gen", "no_status", "no_t/a"}
+            special = {"_flag", "_gen", "no_status", "no_t/a", "rejected"}
             if test_name in special:
                 # Ensure helper columns exist with sane defaults
                 if test_name == "_gen":
@@ -1169,28 +756,39 @@ class TextScrapingReviewApp(QMainWindow):
                     if df[col].dtype != bool:
                         df[col] = (
                             df[col]
-                            .astype(str).str.strip().str.lower()
+                            .astype(str)
+                            .str.strip()
+                            .str.lower()
                             .isin(["true", "1", "yes", "y"])
                         )
-                    mask = (df[col] == True)
+                    mask = df[col] == True
 
                 elif test_name == "no_status":
                     mask = df["metric_status"].fillna("").astype(str).str.strip().eq("")
 
+                elif test_name == "rejected":
+                    mask = df["reviewer_status "].fillna(
+                        "".astype(str).str.strip().eq("REJECT")
+                    )
+
                 else:  # "no_t/a"
                     t_blank = df["target"].fillna("").astype(str).str.strip().eq("")
                     a_blank = df["actual"].fillna("").astype(str).str.strip().eq("")
-                    mask = (t_blank & a_blank)
+                    mask = t_blank & a_blank
 
                 # IMPORTANT: restrict_to_rows uses iloc, so pass 0-based positional indices
                 matching_positions = df.index[mask].tolist()
 
                 if not matching_positions:
-                    QMessageBox.information(self, "No Matches", f"No rows matched restriction: {test_name}")
+                    QMessageBox.information(
+                        self, "No Matches", f"No rows matched restriction: {test_name}"
+                    )
                     return
 
                 self.mid_manager.restrict_to_rows(matching_positions)
-                self.logger.info(f"Restriction applied: {len(matching_positions)} rows matched '{test_name}'")
+                self.logger.info(
+                    f"Restriction applied: {len(matching_positions)} rows matched '{test_name}'"
+                )
 
                 # Reset manual review state (optional, but matches your dev-mode review flow)
                 self.manual_review["active_test"] = test_name
@@ -1202,7 +800,9 @@ class TextScrapingReviewApp(QMainWindow):
             # -------------------------
             # Default: restrict to audit FAIL rows for a given test
             # -------------------------
-            log_path = os.path.join(self.settings.get("logFileDirectory", "./logs"), "audit_report.json")
+            log_path = os.path.join(
+                self.settings.get("logFileDirectory", "./logs"), "audit_report.json"
+            )
             with open(log_path, "r", encoding="utf-8") as f:
                 audit_results = json.load(f)
 
@@ -1211,15 +811,20 @@ class TextScrapingReviewApp(QMainWindow):
             failed_positions = [
                 int(entry["index"]) - 1
                 for entry in audit_results
-                if entry.get("tests", {}).get(test_name) == "FAIL" and str(entry.get("index", "")).isdigit()
+                if entry.get("tests", {}).get(test_name) == "FAIL"
+                and str(entry.get("index", "")).isdigit()
             ]
 
             if not failed_positions:
-                QMessageBox.information(self, "No Failures", f"No failures found for test: {test_name}")
+                QMessageBox.information(
+                    self, "No Failures", f"No failures found for test: {test_name}"
+                )
                 return
 
             self.mid_manager.restrict_to_rows(failed_positions)
-            self.logger.info(f"Loaded {len(failed_positions)} failure rows for test '{test_name}' into MID view")
+            self.logger.info(
+                f"Loaded {len(failed_positions)} failure rows for test '{test_name}' into MID view"
+            )
 
             self.manual_review["active_test"] = test_name
             self.manual_review["results"] = {}
@@ -1231,87 +836,142 @@ class TextScrapingReviewApp(QMainWindow):
             self.logger.error(f"Failed to restrict MID (test_name={test_name}): {e}")
             QMessageBox.critical(self, "Error", f"Could not restrict MID:\n{e}")
 
-
-    def restrict_for_reviewer(self, condition: str = "_flag"):
+    def restrict_for_reviewer(self, test_name: str = "none"):
         """
         Restrict the MID view to rows where df[condition] is True.
         Intended for Reviewer mode. Valid conditions: "_flag", "_gen".
         """
         try:
-            if not hasattr(self, "mid_manager") or self.mid_manager.df is None or self.mid_manager.df.empty:
+            if (
+                not hasattr(self, "mid_manager")
+                or self.mid_manager.df is None
+                or self.mid_manager.df.empty
+            ):
                 QMessageBox.information(self, "No MID", "No MID is currently loaded.")
                 return
 
-            # Guard: only allow known reviewer filters
-            if condition not in {"_flag", "_gen", "none"}:
-                QMessageBox.warning(self, "Invalid Filter", f"Unknown filter: {condition}")
-                return
-
-
-            if condition == "none":
+            # --- Clear restriction: reload MID from disk (since MIDManager has no clear_restriction()) ---
+            if test_name == "none":
                 self.mid_manager.clear_restriction()
                 self.logger.info("Cleared reviewer restrictions; full MID restored")
                 self.load_mid_entry_document()
                 return
 
-            # Ensure the requested column exists with sane defaults
             df = self.mid_manager.df
-            if condition == "_gen":
-                # Your MIDManager already has this helper; use it when possible.
-                try:
-                    self.mid_manager.ensure_gen_flag()
-                except Exception:
-                    if "_gen" not in df.columns:
-                        df["_gen"] = False
-            else:  # "_flag"
-                if "_flag" not in df.columns:
-                    df["_flag"] = False
 
+            # -------------------------
+            # Special “column-based” restrictions
+            # -------------------------
+            special = {"_flag", "_gen", "no_status", "no_t/a", "rejected"}
+            if test_name in special:
+                # Ensure helper columns exist with sane defaults
+                if test_name == "_gen":
+                    try:
+                        self.mid_manager.ensure_gen_flag()
+                    except Exception:
+                        if "_gen" not in df.columns:
+                            df["_gen"] = False
 
-            # Normalize to boolean if it arrived as strings (e.g., "True"/"False")
-            if df[condition].dtype != bool:
-                df[condition] = df[condition].astype(str).str.strip().str.lower().isin(["true", "1", "yes", "y"])
+                if test_name == "_flag":
+                    if "_flag" not in df.columns:
+                        df["_flag"] = False
 
-            # IMPORTANT: restrict_to_rows uses iloc, so we must pass 0-based positional indices
-            matching_indices = df.index[df[condition] == True].tolist()
+                if test_name == "no_status":
+                    if "metric_status" not in df.columns:
+                        df["metric_status"] = ""
 
-            if not matching_indices:
-                QMessageBox.information(self, "No Matches", f"No rows found where {condition} is True.")
-                return
+                if test_name == "no_t/a":
+                    # Create if missing (some sheets won’t have these yet)
+                    if "target" not in df.columns:
+                        df["target"] = ""
+                    if "actual" not in df.columns:
+                        df["actual"] = ""
 
-            self.mid_manager.restrict_to_rows(matching_indices)
-            self.logger.info(f"Reviewer restriction applied: {len(matching_indices)} rows where {condition} == True")
+                # Build mask per condition
+                if test_name in {"_flag", "_gen"}:
+                    # Normalize to boolean if it arrived as strings
+                    col = test_name
+                    if df[col].dtype != bool:
+                        df[col] = (
+                            df[col]
+                            .astype(str)
+                            .str.strip()
+                            .str.lower()
+                            .isin(["true", "1", "yes", "y"])
+                        )
+                    mask = df[col] == True
+
+                elif test_name == "no_status":
+                    mask = df["metric_status"].fillna("").astype(str).str.strip().eq("")
+
+                elif test_name == "rejected":
+                    mask = (
+                        df["reviewer_status"]
+                        .fillna("")
+                        .astype(str)
+                        .str.strip()
+                        .eq("REJECT")
+                    )
+
+                elif test_name == "no_t/a":  # "no_t/a"
+                    t_blank = df["target"].fillna("").astype(str).str.strip().eq("")
+                    a_blank = df["actual"].fillna("").astype(str).str.strip().eq("")
+                    mask = t_blank & a_blank
+
+                # IMPORTANT: restrict_to_rows uses iloc, so pass 0-based positional indices
+                matching_positions = df.index[mask].tolist()
+
+                if not matching_positions:
+                    QMessageBox.information(
+                        self, "No Matches", f"No rows matched restriction: {test_name}"
+                    )
+                    return
+
+                self.mid_manager.restrict_to_rows(matching_positions)
+                self.logger.info(
+                    f"Restriction applied: {len(matching_positions)} rows matched '{test_name}'"
+                )
 
             # Reset review state if you want reviewer mode to behave like the dev-mode review flow
-            self.manual_review["active_test"] = condition
+            self.manual_review["active_test"] = test_name
             self.manual_review["results"] = {}
 
             # Load first row/document in the restricted MID
             self.load_mid_entry_document()
 
         except Exception as e:
-            self.logger.error(f"Failed to restrict MID for reviewer (condition={condition}): {e}")
-            QMessageBox.critical(self, "Error", f"Could not restrict MID for reviewer:\n{e}")
-
+            self.logger.error(
+                f"Failed to restrict MID for reviewer (condition={test_name}): {e}"
+            )
+            QMessageBox.critical(
+                self, "Error", f"Could not restrict MID for reviewer:\n{e}"
+            )
 
     # Save manual reveiw results to JSON (Dev mode only)
     def export_review_results(self):
         if not self.manual_review["active_test"]:
-            QMessageBox.information(self, "Not in Review Mode", "You must be in manual review mode to export results.")
+            QMessageBox.information(
+                self,
+                "Not in Review Mode",
+                "You must be in manual review mode to export results.",
+            )
             return
 
         try:
             filename = f"{self.manual_review['active_test']}_review.json"
-            output_path = os.path.join(self.settings.get("logFileDirectory", "./logs"), filename)
+            output_path = os.path.join(
+                self.settings.get("logFileDirectory", "./logs"), filename
+            )
             with open(output_path, "w", encoding="utf-8") as f:
                 json.dump(self.manual_review["results"], f, indent=2)
 
             self.logger.info(f"Manual review results saved to {output_path}")
-            QMessageBox.information(self, "Export Complete", f"Review results saved to:\n{output_path}")
+            QMessageBox.information(
+                self, "Export Complete", f"Review results saved to:\n{output_path}"
+            )
         except Exception as e:
             self.logger.error(f"Failed to export review results: {e}")
             QMessageBox.critical(self, "Export Error", str(e))
-
 
     def save_mid_to_file(self):
         # Commit current editors first
@@ -1322,8 +982,7 @@ class TextScrapingReviewApp(QMainWindow):
             return
 
         path, _ = QFileDialog.getSaveFileName(
-            self, "Save MID", "mid_export.xlsx",
-            "Excel Workbook (*.xlsx);;CSV (*.csv)"
+            self, "Save MID", "mid_export.xlsx", "Excel Workbook (*.xlsx);;CSV (*.csv)"
         )
         if not path:
             return
@@ -1332,7 +991,6 @@ class TextScrapingReviewApp(QMainWindow):
         if df_to_save is None:
             df_to_save = self.mid_manager.df
         # then write df_to_save to Excel
-
 
         try:
             if path.lower().endswith(".csv"):
@@ -1345,43 +1003,67 @@ class TextScrapingReviewApp(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Save MID", f"Failed to save:\n{e}")
 
-
     # Primary function for saving current editor state into the MID
     def _commit_sidebar_fields(self):
         if not hasattr(self, "mid_manager") or self.mid_manager.df is None:
             return
         idx = self.mid_manager.current_index  # set_value includes a view->master conversion, so we pass the view index here
-        if idx is None: return
+        if idx is None:
+            return
         for k, ed in self.mid_field_editors.items():
             self.mid_manager.set_value(idx, k, ed.toPlainText().strip())
-        self.mid_manager.set_value(idx, "_flag",self.chk_flag.isChecked()) 
-        self.logger.info(f"saved flag status: {self.mid_manager.df.at[idx, "_flag"]}")
-        self.mid_manager.set_value(idx, "_achieved",self.chk_achieved.isChecked())
-        self.mid_manager.set_value(idx, "_future_dated",self.chk_future_dated.isChecked()) 
-        self.mid_manager.set_value(idx, "_aggregate",self.chk_aggregate.isChecked())
+        self.mid_manager.set_value(idx, "_flag", self.chk_flag.isChecked())
+        self.logger.info(f"saved flag status: {self.mid_manager.df.at[idx, '_flag']}")
+        self.mid_manager.set_value(idx, "_achieved", self.chk_achieved.isChecked())
+        self.mid_manager.set_value(
+            idx, "_future_dated", self.chk_future_dated.isChecked()
+        )
+        self.mid_manager.set_value(idx, "_aggregate", self.chk_aggregate.isChecked())
         self.logger.info(f"Saved information for {self.current_agency_yr}: ")
         # metric status and scheme
         scheme = self._safe_text(self.class_scheme_combo.currentText()).strip()
-        self.mid_manager.set_value(idx, "classification_scheme",scheme)
-        self.mid_manager.set_value(idx, "metric_status", self._safe_text(self._get_metric_status()))
-        self.mid_manager.set_value(idx, "target",self._safe_text(self.target_edit.text()).strip())
-        self.mid_manager.set_value(idx, "actual",self._safe_text(self.actual_edit.text()).strip())
-        self.mid_manager.set_value(idx, "notes",self._safe_text(self.notes.text()).strip())
-        self.mid_manager.set_value(idx, "Page", self.page_indices[self.current_page_index] + 1 if self.page_indices else self.current_page_index + 1) 
+        self.mid_manager.set_value(idx, "classification_scheme", scheme)
+        self.mid_manager.set_value(
+            idx, "metric_status", self._safe_text(self._get_metric_status())
+        )
+        self.mid_manager.set_value(
+            idx, "target", self._safe_text(self.target_edit.text()).strip()
+        )
+        self.mid_manager.set_value(
+            idx, "actual", self._safe_text(self.actual_edit.text()).strip()
+        )
+        self.mid_manager.set_value(
+            idx, "notes", self._safe_text(self.notes.text()).strip()
+        )
+        self.mid_manager.set_value(
+            idx,
+            "Page",
+            self.page_indices[self.current_page_index] + 1
+            if self.page_indices
+            else self.current_page_index + 1,
+        )
         if self.mode.lower() == "reviewer":
-            self.mid_manager.set_value(idx, "reviewer_comments", self._safe_text(self.reviewer_notes.text()).strip())
-            if self.mid_manager.df.at[idx, "reviewer_status"] not in ["ACCEPT","REJECT"]:
-                self.mid_manager.set_value(idx, "reviewer_status","SEEN")
+            self.mid_manager.set_value(
+                idx,
+                "reviewer_comments",
+                self._safe_text(self.reviewer_notes.text()).strip(),
+            )
+            if self.mid_manager.df.at[idx, "reviewer_status"] not in [
+                "ACCEPT",
+                "REJECT",
+            ]:
+                self.mid_manager.set_value(idx, "reviewer_status", "SEEN")
 
         yrs = self.years_to_eval_spin.value()
         if self.chk_future_dated.isChecked() and yrs > 0:
-            self.mid_manager.set_value(idx, "years_to_evaluation",str(yrs))
+            self.mid_manager.set_value(idx, "years_to_evaluation", str(yrs))
         else:
-            self.mid_manager.set_value(idx, "years_to_evaluation","")
+            self.mid_manager.set_value(idx, "years_to_evaluation", "")
 
     def _clear_field(self, key: str):
         ed = self.mid_field_editors.get(key)
-        if ed: ed.clear()
+        if ed:
+            ed.clear()
 
     def _goto_index(self, new_idx: int):
         """Your existing navigation method; ensure it sets current_index then calls update_info_labels/show_page/etc."""
@@ -1390,329 +1072,7 @@ class TextScrapingReviewApp(QMainWindow):
         self.load_mid_fields_from_row()
         # show_page() etc. if needed
 
-    def _text(self, key: str) -> str:
-        ed = self.mid_field_editors.get(key)
-        return ed.toPlainText().strip() if ed else ""
-
-    def _set_text(self, key: str, value: str):
-        ed = self.mid_field_editors.get(key)
-        if ed:
-            ed.blockSignals(True)
-            ed.setPlainText(value or "")
-            ed.blockSignals(False)
-
-    def _focus(self, key: str):
-        ed = self.mid_field_editors.get(key)
-        if ed:
-            ed.setFocus()
-
-    def _get_metric_status(self) -> str:
-        for key, rb in self.metric_status_buttons.items():
-            if rb.isChecked():
-                return key
-        return ""
-
-    def _set_metric_status(self, value: str):
-        # value is based on selected classification scheme
-        for key, rb in self.metric_status_buttons.items():
-            rb.blockSignals(True)
-            rb.setChecked(key == value)
-            rb.blockSignals(False)
-
-    def _levels_to_clear(self, level_key: str) -> list[str]:
-        order = ["stratobj", "obj", "goal", "metric"]
-        if level_key not in order:
-            return []
-        return order[order.index(level_key):]
-
-    def on_add_level_clicked(self, level_key: str):
-        self._commit_sidebar_fields()
-        idx = self.mid_manager.current_index
-        if idx is None:
-            return
-        new_row = self.mid_manager.clone_for_child(idx, level_key)
-        to_clear = self._levels_to_clear(level_key)
-
-        # Clear metadata where relevant
-        if "goal" in to_clear:
-            if "_no_metrics" in new_row:
-                new_row["_no_metrics"] = False
-
-        if "metric" in to_clear:
-            if "metric_status" in new_row:
-                new_row["metric_status"] = ""
-            if "_achieved" in new_row:
-                new_row["_achieved"] = False
-            if "_future_dated" in new_row:
-                new_row["_future_dated"] = False
-
-        new_idx = self.mid_manager.insert_row_after(idx, new_row)
-        self._goto_index(new_idx)
-
-        # Update UI
-        for k in to_clear:
-            self._set_text(k, "")
-        if "metric" in to_clear:
-            self._set_metric_status("")
-        self._focus(level_key)
-
-
-
-    # --- Button slots ---
-
-
-    def load_mid_fields_from_row(self):
-        row = getattr(self, "mid_manager", None).get_current_row() if hasattr(self, "mid_manager") else None
-        if row is None:
-            for k, ed in self.mid_field_editors.items():
-                ed.clear()
-            self._set_metric_status("")
-            return
-
-        else:
-            idx = self.mid_manager.current_index
-            # flagged
-            self.chk_flag.blockSignals(True)
-            self.chk_flag.setChecked(self.mid_manager.df.at[idx, "_flag"])
-            self.chk_flag.blockSignals(False)
-            # achieved
-            self.chk_achieved.blockSignals(True)
-            self.chk_achieved.setChecked(self.mid_manager.df.at[idx, "_achieved"])
-            self.chk_achieved.blockSignals(False)
-            # future-dated
-            self.chk_future_dated.blockSignals(True)
-            self.chk_future_dated.setChecked(self.mid_manager.df.at[idx, "_future_dated"])
-            self.chk_future_dated.blockSignals(False)
-            # aggregate
-            self.chk_aggregate.blockSignals(True)
-            self.chk_aggregate.setChecked(self.mid_manager.df.at[idx, "_aggregate"])
-            self.chk_aggregate.blockSignals(False)
-            # target
-            self.target_edit.blockSignals(True)
-            self.target_edit.setText(self._safe_text(row.get("target", "") or ""))
-            self.target_edit.blockSignals(False)
-            # actual
-            self.actual_edit.blockSignals(True)
-            self.actual_edit.setText(self._safe_text(row.get("actual", "") or ""))
-            self.actual_edit.blockSignals(False)
-
-            # years_to_eval
-            raw_years = self._safe_text(str(row.get("years_to_evaluation", "") or "")).strip()
-            try:
-                years_val = int(raw_years) if raw_years else 0
-            except ValueError:
-                years_val = 0
-
-            self.years_to_eval_spin.blockSignals(True)
-            self.years_to_eval_spin.setValue(years_val)
-            self.years_to_eval_spin.blockSignals(False)
-
-            #enable years box iff future-dated is checked
-            is_fd = bool(self.mid_manager.df.at[idx, "_future_dated"])
-            self.years_to_eval_spin.setEnabled(is_fd)
-
-            # notes
-            self.notes.blockSignals(True)
-            self.notes.setText(self._safe_text(row.get("notes", "")) or "")
-            self.notes.blockSignals(False)
-
-            # reviewer notes
-            self.reviewer_notes.blockSignals(True)
-            self.reviewer_notes.setText(self._safe_text(row.get("reviewer_comments", "")) or "")
-            self.reviewer_notes.blockSignals(False)
-
-        # Fill in the four editor blocks
-        for k, ed in self.mid_field_editors.items():
-            ed.blockSignals(True)
-            ed.setPlainText(row.get(k, "") or "")
-            ed.blockSignals(False)
-
-
-        scheme = self._safe_text(row.get("classification_scheme", "") or "").strip()
-        classes = self.settings.get("evaluationClasses", {}) or {}
-        if scheme and scheme in classes:
-            self.class_scheme_combo.blockSignals(True)
-            self.class_scheme_combo.setCurrentText(scheme)
-            self.class_scheme_combo.blockSignals(False)
-            self._build_metric_status_radios(scheme)
-        elif scheme == "" and self.class_scheme_combo.currentText() in classes:
-            pass
-        else:
-            default_name = self.settings.get("defaultClass", "")
-            if default_name in classes:
-                self.class_scheme_combo.blockSignals(True)
-                self.class_scheme_combo.setCurrentText(default_name)
-                self.class_scheme_combo.blockSignals(False)
-                self._build_metric_status_radios(default_name)               
-
-        self._set_metric_status(row.get("metric_status", "") or "")
-
-
-    def on_flag_togggle(self, state, propogate = False):
-        self.statusBar().showMessage("Flagged for review.")
-        self.update_info_labels()
-
-    def on_agg_togggle(self, state):
-        self.statusBar().showMessage("Flagged as Aggregate")
-        self.update_info_labels()
-
-    def on_achieved_toggle(self, state):
-        self.statusBar().showMessage("Toggled achieved status")
-        self.update_info_labels()
-
-    def on_fd_togggle(self, state):
-        is_fd = (state == Qt.Checked)
-        self.years_to_eval_spin.setEnabled(is_fd)
-
-        if not is_fd:
-            self.years_to_eval_spin.blockSignals(True)
-            self.years_to_eval_spin.setValue(0)
-            self.years_to_eval_spin.blockSignals(False)
-           
-    def on_years_to_eval_changed(self, value: int):
-        self.update_info_labels()
-       
-
-    def _refresh_class_schemes_from_settings(self):
-        classes = self.settings.get("evaluationClasses", {}) or {}
-        names = list(classes.keys())
-
-        self.class_scheme_combo.blockSignals(True)
-        self.class_scheme_combo.clear()
-        self.class_scheme_combo.addItems(names)
-        self.class_scheme_combo.blockSignals(False)
-
-        # Load a default class
-        default_name = self.settings.get("defaultClass", "")
-        if default_name in names:
-            self.class_scheme_combo.setCurrentText(default_name)
-            self._build_metric_status_radios(default_name)
-        elif names:
-            self.class_scheme_combo.setCurrentIndex(0)
-            self._build_metric_status_radios(names[0])
-        else:
-            self._build_metric_status_radios(None)
-
-    def _build_metric_status_radios(self, scheme_name: str | None):
-        for rb in self.metric_status_buttons.values():
-            self.metric_status_group.removeButton(rb)
-            rb.setParent(None)
-            rb.deleteLater()
-        self.metric_status_buttons = {}
-
-        # clear layout widgets
-        while self.metric_status_layout.count():
-            item = self.metric_status_layout.takeAt(0)
-            w = item.widget()
-            if w:
-                w.setParent(None)
-                w.deleteLater()
-
-        classes = self.settings.get("evaluationClasses", {}) or {}
-        options = []
-        if scheme_name and scheme_name in classes:
-            options = classes[scheme_name].get("option_types", []) or []
-
-        for o in options:
-            rb = QRadioButton(str(o))
-            self.metric_status_group.addButton(rb)
-            self.metric_status_buttons[str(o)] = rb
-            self.metric_status_layout.addWidget(rb)
-
-        self.metric_status_layout.addStretch(1)
-
-    def on_scheme_changed(self, scheme_name: str):
-        self._build_metric_status_radios(scheme_name)
-
-        # Attempt to restore current row's metric_status
-        row = self.mid_manager.get_current_row() if hasattr(self, "mid_manager") else None 
-        if row is not None:
-            self._set_metric_status(row.get("metric_status", "") or "")
-
-    def _safe_text(self, v) -> str:
-        if v is None:
-            return ""
-        try:
-            if pd.isna(v):
-                return ""
-        except Exception:
-            pass
-
-        return str(v)
-
-
-    def _show_png_bytes_in_center(self, png_bytes: bytes):
-        pm = QPixmap()
-        pm.loadFromData(QByteArray(png_bytes), "PNG")
-        # Use your existing central image widget here; QLabel is common:
-        self.pdf_label.setPixmap(pm)
-        self.pdf_label.adjustSize()
-
-    def _get_selected_snippet(self) -> str:
-        """
-        Returns selected text from the scraped-text panel (self.text_edit).
-        Normalizes Qt paragraph separators to '\n'.
-        """
-        if not hasattr(self, "text_edit") or self.text_edit is None:
-            return ""
-        cur = self.text_edit.textCursor()
-        txt = cur.selectedText() or ""
-        # QTextCursor.selectedText uses U+2029 for line breaks
-        txt = txt.replace("\u2029", " ").strip()
-        return txt
-
-    def _fill_mid_field_from_selection(self, field_key: str):
-        snippet = self._get_selected_snippet()
-        if not snippet:
-            self.statusBar().showMessage("No highlighted text to transfer.", 2000)
-            return
-
-        cleaned = self._extract_and_apply_status_label(snippet)
-
-        self._set_text(field_key, cleaned)
-        self._focus(field_key)
-
-
-    def _fill_lineedit_from_selection(self, which: str):
-        snippet = self._get_selected_snippet()
-        if not snippet:
-            self.statusBar().showMessage("No highlighted text to transfer.", 2000)
-            return
-
-        if which == "target" and hasattr(self, "target_edit"):
-            self.target_edit.setText(snippet)
-            self.target_edit.setFocus()
-        elif which == "actual" and hasattr(self, "actual_edit"):
-            self.actual_edit.setText(snippet)
-            self.actual_edit.setFocus()
-
-    def _trigger_add_level(self, level_key: str):
-        """
-        Ctrl+1..4 should behave like clicking the '+' button for that level.
-        Uses the actual button if present (preferred), otherwise calls the handler.
-        """
-        # Preferred: click the real button you created next to the field
-        btns = getattr(self, "add_level_buttons", None)
-        if isinstance(btns, dict) and level_key in btns and btns[level_key] is not None:
-            btns[level_key].click()
-            return
-
-        # Fallback: direct handler if you implemented it
-        if hasattr(self, "on_add_level_clicked"):
-            self.on_add_level_clicked(level_key)
-
-    def _select_metric_status_by_index(self, idx: int):
-        buttons = list(self.metric_status_buttons.values())
-        if 0 <= idx < len(buttons):
-            buttons[idx].setChecked(True)
-
-    def _clear_metric_status(self):
-        self.metric_status_group.setExclusive(False)
-        for b in self.metric_status_buttons.values():
-            b.setChecked(False)
-        self.metric_status_group.setExclusive(True)
-
-
+    
 
     def _setup_shortcuts(self):
         self._shortcuts = []
@@ -1727,7 +1087,7 @@ class TextScrapingReviewApp(QMainWindow):
         # Radio buttons: Ctrl+1-9
         # -------------------------
         for i in range(9):
-            bind(f"Ctrl+{i+1}", lambda i=i: self._select_metric_status_by_index(i))
+            bind(f"Ctrl+{i + 1}", lambda i=i: self._select_metric_status_by_index(i))
 
         # Clear radio selection
         bind("0", self._clear_metric_status)
@@ -1743,7 +1103,7 @@ class TextScrapingReviewApp(QMainWindow):
         bind("Ctrl+Enter", self.next_mid_entry)  # keypad Enter
 
         # -------------------------
-        # Text transfer 
+        # Text transfer
         # -------------------------
         bind("1", lambda: self._fill_mid_field_from_selection("stratobj"))
         bind("2", lambda: self._fill_mid_field_from_selection("obj"))
@@ -1768,13 +1128,17 @@ class TextScrapingReviewApp(QMainWindow):
 
             # Only swallow the *unmodified* single-key shortcuts
             if mods in (Qt.NoModifier,):
-
                 # digits 0–4
                 if key in (Qt.Key_0, Qt.Key_1, Qt.Key_2, Qt.Key_3, Qt.Key_4):
                     return True
 
                 # [, ], -, =
-                if key in (Qt.Key_BracketLeft, Qt.Key_BracketRight, Qt.Key_Minus, Qt.Key_Equal):
+                if key in (
+                    Qt.Key_BracketLeft,
+                    Qt.Key_BracketRight,
+                    Qt.Key_Minus,
+                    Qt.Key_Equal,
+                ):
                     return True
 
             # function keys are fine to pass through (no text insertion anyway)
@@ -1783,7 +1147,6 @@ class TextScrapingReviewApp(QMainWindow):
                 return True
 
         return super().eventFilter(obj, event)
-
 
     def _scheme_labels(self) -> list[str]:
         """
@@ -1816,7 +1179,9 @@ class TextScrapingReviewApp(QMainWindow):
 
             # Match label as a standalone token (word boundary-ish), anywhere in string.
             # This works for multi-word labels.
-            pattern = r"(?<!\S)" + re.escape(lab) + r"(?!\S)"  # surrounded by whitespace or ends
+            pattern = (
+                r"(?<!\S)" + re.escape(lab) + r"(?!\S)"
+            )  # surrounded by whitespace or ends
             m = re.search(pattern, s_norm)
             if not m:
                 continue
@@ -1827,7 +1192,7 @@ class TextScrapingReviewApp(QMainWindow):
                 rb.setChecked(True)
 
             # Remove that occurrence of the label from the normalized string
-            s_norm = (s_norm[:m.start()] + s_norm[m.end():]).strip()
+            s_norm = (s_norm[: m.start()] + s_norm[m.end() :]).strip()
 
             # Stop after the first match
             break
@@ -1837,123 +1202,9 @@ class TextScrapingReviewApp(QMainWindow):
 
         return s_norm
 
-    def highlight_sidebar_matches(self):
-        """
-        Highlight occurrences of MID field text inside the scraped sidebar text.
-        Called only after document/page load.
-        """
-        if not self.text_edit.isVisible():
-            return
+    
 
-        doc = self.text_edit.document()
-        if doc is None:
-            return
-
-        selections = []
-
-        # --- Build a whitespace-collapsed haystack PLUS a map back to raw indices ---
-        raw = doc.toPlainText()
-
-        def collapse_with_map(s: str):
-            # Treat Qt separators and NBSP as whitespace too
-            ws_chars = {"\u2029", "\u2028", "\u00A0", "\n", "\r", "\t"}
-            out = []
-            idx_map = []
-            prev_space = False
-
-            for i, ch in enumerate(s):
-                is_ws = ch.isspace() or ch in ws_chars
-                if is_ws:
-                    if not prev_space:
-                        out.append(" ")
-                        idx_map.append(i)   # this collapsed space corresponds to this raw index
-                        prev_space = True
-                    continue
-
-                out.append(ch)
-                idx_map.append(i)
-                prev_space = False
-
-            # trim leading/trailing space (keep map aligned)
-            while out and out[0] == " ":
-                out.pop(0); idx_map.pop(0)
-            while out and out[-1] == " ":
-                out.pop(); idx_map.pop()
-
-            return "".join(out), idx_map
-
-        hay_compact, map_compact_to_raw = collapse_with_map(raw)
-        hay_l = hay_compact.lower()
-        # -------------------------------------------------------------------------
-
-        def add_matches(needle: str, color: QColor):
-            needle = (needle or "").strip()
-            if len(needle) < 3 and not needle.isdigit():
-                return
-
-            needle_compact, _ = collapse_with_map(needle)
-            if not needle_compact:
-                return
-            needle_l = needle_compact.lower()
-
-            start = 0
-            #self.logger.debug(f"hay: {hay_l}")
-            #self.logger.debug(f"needle: {needle_l}")
-
-            while True:
-                pos = hay_l.find(needle_l, start)
-                if pos == -1:
-                    break
-
-                end = pos + len(needle_compact)
-
-                # Map compact indices back to raw QTextDocument indices
-                raw_start = map_compact_to_raw[pos]
-                raw_end = map_compact_to_raw[end - 1] + 1  # end is exclusive
-
-                cursor = QTextCursor(doc)
-                cursor.setPosition(raw_start)
-                cursor.setPosition(raw_end, QTextCursor.KeepAnchor)
-
-                sel = QTextEdit.ExtraSelection()
-                sel.cursor = cursor
-
-                fmt = QTextCharFormat()
-                fmt.setBackground(color)
-                sel.format = fmt
-
-                selections.append(sel)
-
-                start = end
-
-        for field_key in self.mid_field_keys:
-            editor = self.mid_field_editors.get(field_key)
-            if editor:
-                add_matches(
-                    editor.toPlainText(),
-                    self._field_highlight_colors.get(field_key, QColor("#FFFF00"))
-                )
-
-        if hasattr(self, "target_edit"):
-            add_matches(
-                self.target_edit.text() if hasattr(self.target_edit, "text") else self.target_edit.toPlainText(),
-                self._field_highlight_colors["target"]
-            )
-
-        if hasattr(self, "actual_edit"):
-            add_matches(
-                self.actual_edit.text() if hasattr(self.actual_edit, "text") else self.actual_edit.toPlainText(),
-                self._field_highlight_colors["actual"]
-            )
-
-        self.text_edit.setExtraSelections(selections)
-
-
-
-
-
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = TextScrapingReviewApp()
     window.show()

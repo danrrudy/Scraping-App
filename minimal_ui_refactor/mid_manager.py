@@ -4,28 +4,19 @@ import re
 
 import pandas as pd
 from logger import setup_logger
+from mid_schema import (
+    LEGACY_HIERARCHY_COLUMNS,
+    LEGACY_SOURCE_COLUMNS,
+    MIDSchema,
+    WORKFLOW_COLUMN_DEFAULTS,
+    clean_value,
+    normalize_sheet_name,
+)
 
 # Expected structure for the MID
-EXPECTED_COLUMNS = [
-    "agency_yr",
-    "agency",
-    "year",
-    "agid",
-    "subagency",
-    "stratobj",
-    "obj",
-    "goal",
-    "metric",
-    "PDF Page Number",
-    "Format",
-    "Format_Detail",
-    "Results_DisplayFormat",
-    "Table Name/Word Search Keyword",
-    "Other Detail",
-    "Format_Type",
-    "Format_Type_Updated",
-    "Page",
-]
+# Compatibility exports for legacy plugins/tests. MIDManager no longer requires
+# these columns unless they are selected by the active MIDSchema.
+EXPECTED_COLUMNS = list(LEGACY_SOURCE_COLUMNS)
 
 
 # Ensure columns are properly typecast
@@ -60,21 +51,32 @@ COLUMN_TYPES = {
 }
 
 # Heirarchy Definition
-LEVELS = ["stratobj", "obj", "goal", "metric"]
+LEVELS = list(LEGACY_HIERARCHY_COLUMNS)
 
 
 class MIDManager:
-    def __init__(self, path, sheet_name=0):
+    def __init__(self, path, sheet_name=0, schema=None, boolean_columns=()):
+        """``boolean_columns`` are extra true/false columns to guarantee.
+
+        User-defined checkboxes name their own MID columns, which the sheet
+        will not have the first time they are used.
+        """
         self.logger = setup_logger()
+        self.schema = schema or MIDSchema.legacy()
+        self.boolean_columns = tuple(dict.fromkeys(boolean_columns))
         df = self.load_mid(path, sheet_name)
         self.master_df = df
         self.view_indices = list(range(len(df)))
         self.df = df.copy()
         self.current_index = 0
+        # Set whenever a value actually changes, cleared when the MID is
+        # written out; drives the unsaved-changes prompt on restart.
+        self._modified = False
         self.logger.info("Initialized MIDManager")
 
     def load_mid(self, path, sheet_name=0):
         """Loads and validates the Master Input Document (MID) Excel file."""
+        sheet_name = normalize_sheet_name(sheet_name)
         try:
             df = pd.read_excel(
                 path, sheet_name=sheet_name, dtype=str, keep_default_na=False
@@ -82,29 +84,230 @@ class MIDManager:
         except Exception as e:
             raise RuntimeError(f"Failed to load MID file: {e}")
 
-        missing = [col for col in EXPECTED_COLUMNS if col not in df.columns]
-        if missing:
-            raise ValueError(f"MID file is missing required columns: {missing}")
+        df.columns = [str(column).strip() for column in df.columns]
+        self.schema.validate_columns(df.columns)
 
-        # Cast columns to correct types
-        for col, col_type in COLUMN_TYPES.items():
-            if col in df.columns:
-                try:
-                    if col_type is int:
-                        df[col] = pd.to_numeric(df[col], errors="coerce").astype(
-                            "Int64"
-                        )
-                    elif col_type is bool:
-                        df[col] = df[col].astype(str).str.strip() == "True"
-                    else:
-                        df[col] = df[col].fillna("").astype(str).str.strip()
+        # Only the anchor has to exist in the sheet. Everything else the schema
+        # refers to is created empty so it can be filled in from the app and
+        # written out on export.
+        created_columns = self.schema.creatable_columns(df.columns)
+        for column in created_columns:
+            df[column] = ""
+        if created_columns:
+            self.logger.warning(
+                f"MID has no column(s) {list(created_columns)}; created empty. "
+                "Values entered in the app are written when you export the MID."
+            )
 
-                except Exception as e:
-                    raise ValueError(
-                        f"Failed to cast column '{col}' to {col_type}: {e}"
-                    )
+        # Keep generic source values predictable. Domain-specific type coercion
+        # can be added later without making the loader schema-specific again.
+        for column in df.columns:
+            df[column] = df[column].fillna("").astype(str).str.strip()
+
+        self._validate_anchor(df)
+        self._warn_about_duplicate_observations(df)
+
+        defaults = dict(WORKFLOW_COLUMN_DEFAULTS)
+        for column in self.boolean_columns:
+            defaults.setdefault(column, "" if not column.startswith("_") else False)
+
+        for column, default in defaults.items():
+            if column not in df.columns:
+                df[column] = default
+            elif isinstance(default, bool):
+                df[column] = (
+                    df[column]
+                    .astype(str)
+                    .str.strip()
+                    .str.lower()
+                    .isin(["true", "1", "yes", "y"])
+                )
 
         return df
+
+    def _validate_anchor(self, df):
+        """Every row must say which document it refers to."""
+        anchor_columns = list(self.schema.required_source_columns)
+        blank_anchor = df[anchor_columns].eq("").any(axis=1)
+        if not blank_anchor.any():
+            return
+
+        rows = (df.index[blank_anchor] + 2).tolist()[:10]
+        if self.schema.document_column:
+            raise ValueError(
+                f"Every MID row must name a document in '{self.schema.document_column}'. "
+                f"Check spreadsheet row(s): {rows}"
+            )
+        raise ValueError(
+            "MID X/Y identifiers compose the filename and cannot be blank. "
+            f"Check spreadsheet row(s): {rows}"
+        )
+
+    def _duplicate_mask(self, df):
+        """Rows whose (document, X, Y) identity is shared with another row.
+
+        Reported, never fatal: identifiers are assigned inside the app, so a
+        MID saved mid-assignment would otherwise refuse to reopen. Rows with
+        any blank identity value are unassigned, not duplicates.
+
+        The legacy MID deliberately repeats its identity across hierarchy
+        rows, so it is exempt.
+        """
+        blank = pd.Series(False, index=df.index)
+        columns = list(self.schema.uniqueness_columns)
+        if not columns or self.schema == MIDSchema.legacy():
+            return blank
+        if not self.schema.identifier_columns:
+            # Nothing distinguishes observations within a document yet.
+            return blank
+
+        assigned = df[columns].ne("").all(axis=1)
+        if not assigned.any():
+            return blank
+
+        duplicates = blank.copy()
+        duplicates.loc[assigned] = df.loc[assigned].duplicated(columns, keep=False)
+        return duplicates
+
+    def _warn_about_duplicate_observations(self, df):
+        duplicates = self._duplicate_mask(df)
+        if not duplicates.any():
+            return
+        examples = (
+            df.loc[duplicates, list(self.schema.uniqueness_columns)]
+            .drop_duplicates()
+            .head(5)
+            .apply(tuple, axis=1)
+            .tolist()
+        )
+        self.logger.warning(
+            f"{int(duplicates.sum())} MID row(s) share an observation identity "
+            f"with another row. Example(s): {examples}"
+        )
+
+    def duplicate_observation_positions(self) -> list[int]:
+        """Master positions of rows that share an identity with another row."""
+        if self.master_df is None or self.master_df.empty:
+            return []
+        mask = self._duplicate_mask(self.master_df)
+        return [int(position) for position in self.master_df.index[mask]]
+
+    def duplicate_observation_view_indices(self) -> set[int]:
+        """The same rows as :meth:`duplicate_observation_positions`, as view indices.
+
+        The two numbering schemes differ whenever a restriction is active, so
+        callers iterating ``df`` should use this one.
+        """
+        duplicates = set(self.duplicate_observation_positions())
+        if not duplicates:
+            return set()
+        return {
+            view_index
+            for view_index, master_position in enumerate(self.view_indices)
+            if master_position in duplicates
+        }
+
+    def is_duplicate_observation(self, index=None) -> bool:
+        """Whether the row at a view index collides with another row."""
+        view_index = self.current_index if index is None else index
+        return view_index in self.duplicate_observation_view_indices()
+
+    def document_row_positions(self, index=None) -> list[int]:
+        """Master positions of every row pointing at the same document."""
+        if self.master_df is None or self.master_df.empty:
+            return []
+        row = self._resolve_row(index)
+        if row is None:
+            return []
+        target = self.schema.document_key(row)
+        if not target:
+            return []
+        keys = self.master_df.apply(self.schema.document_key, axis=1)
+        return [int(position) for position in self.master_df.index[keys == target]]
+
+    def document_position(self, index=None) -> tuple[int, int]:
+        """``(ordinal, total)`` of this row among the rows sharing its document."""
+        positions = self.document_row_positions(index)
+        master_position = self._master_pos(
+            self.current_index if index is None else index
+        )
+        if not positions or master_position is None:
+            return (0, 0)
+        try:
+            return (positions.index(master_position) + 1, len(positions))
+        except ValueError:
+            return (0, len(positions))
+
+    def clone_for_document(self, index=None) -> dict:
+        """A blank observation on the same document as the given row.
+
+        The anchor is carried over; identifiers, editable fields, and the
+        review workflow columns are cleared so the new row starts empty.
+        """
+        row = self._resolve_row(index)
+        if row is None:
+            return {}
+
+        new_row = dict(row)
+        cleared = set(self.schema.interaction_columns) | set(
+            self.schema.identifier_columns
+        )
+        cleared.discard(self.schema.document_column)
+
+        for column in cleared:
+            if column in new_row:
+                new_row[column] = ""
+
+        for column, default in WORKFLOW_COLUMN_DEFAULTS.items():
+            if column in new_row and column != "Page":
+                new_row[column] = default
+
+        new_row["_gen"] = True
+        return new_row
+
+    def document_key(self, index=None):
+        row = self._resolve_row(index)
+        if row is None:
+            return ""
+        return self.schema.document_key(row)
+
+    def observation_key(self, index=None):
+        row = self._resolve_row(index)
+        if row is None:
+            return None
+        return self.schema.observation_key(row)
+
+    def observation_label(self, index=None):
+        row = self._resolve_row(index)
+        if row is None:
+            return ""
+        return self.schema.observation_label(row)
+
+    def observation_stem(self, index=None):
+        row = self._resolve_row(index)
+        if row is None:
+            return "observation"
+        return self.schema.observation_stem(row)
+
+    def document_candidates(self, index=None):
+        row = self._resolve_row(index)
+        if row is None:
+            return ()
+        return self.schema.document_candidates(row)
+
+    def format_type(self, index=None, default=-1):
+        row = self._resolve_row(index)
+        if row is None:
+            return default
+        return self.schema.format_type(row, default=default)
+
+    def _resolve_row(self, index=None):
+        """Accept a view index or an already-resolved row mapping."""
+        if index is None:
+            return self.get_current_row()
+        if isinstance(index, (dict, pd.Series)):
+            return index
+        return self.df.iloc[index]
 
     def get_current_row(self):
         m = self._master_pos(self.current_index)
@@ -134,19 +337,23 @@ class MIDManager:
     #         self.current_index -= 1
 
     def select_mid_entry(self, index=None):
-        if self.df is not None and index <= len(self.df) and index > 0:
+        if self.df is not None and index is not None and 0 <= index < len(self.df):
             self.current_index = index
 
     # Parse the 'PDF Page Number' field into a list of zero-indexed page numbers
     # Removes leading p. and expands ranges into a list of integers (inclusive)
     def parse_pdf_pages(self, index=None):
         row = self.get_current_row() if index is None else self.df.iloc[index]
-        # Pull the plain text entry and remove whitespace
-        page_field = str(row.get("PDF Page Number", "")).strip()
+        if not self.schema.page_column:
+            return [0]
+
+        # Pull the configured page reference and remove whitespace.
+        page_field = clean_value(row.get(self.schema.page_column, ""))
 
         if not page_field:
             self.logger.warning(
-                f"No page field listed for {row.get('agency_yr', '')} on line {str(index)}"
+                f"No page field listed for {self.schema.observation_label(row)} "
+                f"on line {str(index)}"
             )
             return []
 
@@ -188,14 +395,14 @@ class MIDManager:
 
     # Heirarchy Helpers
 
-    def get_group_key(self, idx: int) -> str:
-        """Group rows by the agency_yr string."""
-        return str(self.df.at[idx, "agency_yr"])
+    def get_group_key(self, idx: int) -> tuple[str, str]:
+        """Group rows by the configured X/Y observation key."""
+        return self.schema.observation_key(self.df.iloc[idx])
 
     def group_bounds(self, idx: int) -> tuple[int, int]:
         """
         Return (start, end_inclusive) bounds of the contiguous block of rows
-        sharing the same agency_yr as row idx.
+        sharing the same configured X/Y observation key as row idx.
         """
         if self.df is None or self.df.empty:
             return (0, -1)
@@ -204,12 +411,12 @@ class MIDManager:
         e = self.df.index.max()
         # expand upward
         i = idx
-        while i - 1 >= s and str(self.df.at[i - 1, "agency_yr"]) == key:
+        while i - 1 >= s and self.get_group_key(i - 1) == key:
             i -= 1
         start = i
         # expand downward
         j = idx
-        while j + 1 <= e and str(self.df.at[j + 1, "agency_yr"]) == key:
+        while j + 1 <= e and self.get_group_key(j + 1) == key:
             j += 1
         end = j
         return (start, end)
@@ -239,6 +446,7 @@ class MIDManager:
         # insert new row into the view right after after_pos
         self.view_indices.insert(after_pos + 1, new_master_pos)
 
+        self._modified = True
         self._rebuild_view()
         return after_pos + 1
 
@@ -247,6 +455,7 @@ class MIDManager:
         Copy the parent row, clear all levels at or below the child_level.
         Also mark as generated.
         """
+        self._require_legacy_hierarchy()
         parent = self.df.iloc[parent_idx].to_dict()
         assert child_level in LEVELS, f"Unknown child level: {child_level}"
         # Determine which keys to clear
@@ -267,8 +476,17 @@ class MIDManager:
         return new_row
 
     def ensure_gen_flag(self):
+        if "_gen" not in self.master_df.columns:
+            self.master_df["_gen"] = False
         if "_gen" not in self.df.columns:
             self.df["_gen"] = False
+
+    def _require_legacy_hierarchy(self):
+        if not self.schema.is_legacy_hierarchy_compatible(self.df.columns):
+            raise ValueError(
+                "This operation belongs to the legacy hierarchy and is not "
+                "available for the configured generic MID."
+            )
 
     def next_seed_row_index(self, from_idx: int) -> int | None:
         """
@@ -282,13 +500,14 @@ class MIDManager:
 
     def find_parent_for_goal(self, idx: int) -> int | None:
         """Find Objective header row (same agency_yr, same SO+OBJ, goal == '')."""
+        self._require_legacy_hierarchy()
         if idx is None or self.df is None or self.df.empty:
             return None
         key = self.get_group_key(idx)
         so = str(self.df.at[idx, "stratobj"]).strip()
         obj = str(self.df.at[idx, "obj"]).strip()
         i = idx
-        while i >= 0 and str(self.df.at[i, "agency_yr"]) == key:
+        while i >= 0 and self.get_group_key(i) == key:
             if (
                 str(self.df.at[i, "stratobj"]).strip() == so
                 and str(self.df.at[i, "obj"]).strip() == obj
@@ -300,12 +519,13 @@ class MIDManager:
 
     def find_parent_for_obj(self, idx: int) -> int | None:
         """Find Strategic Objective header row (same agency_yr, same SO, obj == '')."""
+        self._require_legacy_hierarchy()
         if idx is None or self.df is None or self.df.empty:
             return None
         key = self.get_group_key(idx)
         so = str(self.df.at[idx, "stratobj"]).strip()
         i = idx
-        while i >= 0 and str(self.df.at[i, "agency_yr"]) == key:
+        while i >= 0 and self.get_group_key(i) == key:
             if (
                 str(self.df.at[i, "stratobj"]).strip() == so
                 and str(self.df.at[i, "obj"]).strip() == ""
@@ -322,6 +542,7 @@ class MIDManager:
         - If stratobj+obj set, goal empty => flag same (so,obj) subtree
         - If stratobj+obj+goal set => flag same (so,obj,goal) subtree
         """
+        self._require_legacy_hierarchy()
         if self.df is None or idx is None:
             return
         if "_flag" not in self.df.columns:
@@ -333,12 +554,9 @@ class MIDManager:
         obj = str(self.df.at[idx, "obj"]).strip()
         goal = str(self.df.at[idx, "goal"]).strip()
 
-        # Always flag current row
-        self.df.at[idx, "_flag"] = flagged
-
         # Compute match depth
         def matches(i: int) -> bool:
-            if str(self.df.at[i, "agency_yr"]) != key:
+            if self.get_group_key(i) != key:
                 return False
             if so and str(self.df.at[i, "stratobj"]).strip() != so:
                 return False
@@ -351,7 +569,7 @@ class MIDManager:
         # Apply to all rows in this group
         for i in range(len(self.df)):
             if matches(i):
-                self.df.at[i, "_flag"] = flagged
+                self.set_value(i, "_flag", flagged)
 
     def delete_current_row(self):
         if self.master_df is None or self.df is None or self.df.empty:
@@ -375,6 +593,7 @@ class MIDManager:
         if self.current_index >= len(self.view_indices):
             self.current_index = max(0, len(self.view_indices) - 1)
 
+        self._modified = True
         self._rebuild_view()
 
     def duplicate_prior_year(self, clear_helpers: bool = True) -> int:
@@ -390,6 +609,7 @@ class MIDManager:
         Raises:
             ValueError if agency/year not available or prior-year block not found.
         """
+        self._require_legacy_hierarchy()
         if self.df is None or self.df.empty:
             raise ValueError("MID is empty; nothing to duplicate.")
 
@@ -574,5 +794,35 @@ class MIDManager:
         if self.master_df is None or self.df is None:
             return
         mpos = self._master_pos(view_pos)
+        # Committing the sidebar rewrites every field on every navigation, so
+        # only a real change counts as an unsaved edit.
+        if col not in self.master_df.columns or self._is_edit(
+            self.master_df.at[mpos, col], value
+        ):
+            self._modified = True
         self.master_df.at[mpos, col] = value
         self.df.at[view_pos, col] = value
+
+    @staticmethod
+    def _is_edit(current, value) -> bool:
+        """Whether writing ``value`` over ``current`` is a real change.
+
+        A MID is read as text, but the application writes native types back:
+        an ``int`` page number landing on the string ``"1"`` is not an edit,
+        and neither is a ``bool`` landing on the numpy bool beside it.
+        """
+        if isinstance(value, bool):
+            return bool(current) != value
+        if current is None or value is None:
+            return current is not value
+        return str(current).strip() != str(value).strip()
+
+    def is_modified(self) -> bool:
+        """Whether the MID holds edits that have not been written to a file."""
+        return self._modified
+
+    def mark_saved(self) -> None:
+        self._modified = False
+
+    def mark_modified(self) -> None:
+        self._modified = True
