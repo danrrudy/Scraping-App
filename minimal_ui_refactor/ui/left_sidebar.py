@@ -111,6 +111,10 @@ class LeftSidebar(QWidget):
     toggleChanged = pyqtSignal(str, bool)
     #: A checkbox's numeric companion changed; ``(toggle key, value)``.
     counterChanged = pyqtSignal(str, int)
+    #: The user changed something the current MID row stores. Every ``set_*``
+    #: method below blocks its widget's signals, so presenting a row never
+    #: raises this — only a person at the keyboard does.
+    userEdited = pyqtSignal()
 
     def __init__(self, context, parent=None):
         super().__init__(parent)
@@ -182,6 +186,7 @@ class LeftSidebar(QWidget):
             row_layout.setSpacing(6)
 
             editor = configure_text_box(QTextEdit())
+            editor.textChanged.connect(self.userEdited)
             self.field_editors[spec.key] = editor
             row_layout.addWidget(editor, 1)
 
@@ -279,6 +284,7 @@ class LeftSidebar(QWidget):
                 counter.valueChanged.connect(
                     lambda value, key=spec.key: self.counterChanged.emit(key, value)
                 )
+                counter.valueChanged.connect(self.userEdited)
                 self.counter_boxes[spec.key] = counter
                 cell_layout.addWidget(QLabel(spec.counter.label))
                 cell_layout.addWidget(counter)
@@ -295,6 +301,7 @@ class LeftSidebar(QWidget):
         label = "User Notes:" if self.context.normalized_mode == "reviewer" else "Notes:"
         self.notes_label = QLabel(label)
         self.notes_edit = QLineEdit()
+        self.notes_edit.textEdited.connect(self.userEdited)
         row.addWidget(self.notes_label)
         row.addWidget(self.notes_edit)
         form.addRow(row)
@@ -306,6 +313,7 @@ class LeftSidebar(QWidget):
         notes_row = QHBoxLayout()
         self.reviewer_notes_label = QLabel("Reviewer Notes:")
         self.reviewer_notes_edit = QLineEdit()
+        self.reviewer_notes_edit.textEdited.connect(self.userEdited)
         notes_row.addWidget(self.reviewer_notes_label)
         notes_row.addWidget(self.reviewer_notes_edit)
         layout.addLayout(notes_row)
@@ -396,10 +404,17 @@ class LeftSidebar(QWidget):
             if not checked:
                 self.set_counter(key, 0)
         self.toggleChanged.emit(key, checked)
+        self.userEdited.emit()
+
+    def _on_metric_status_toggled(self, checked):
+        """Only the radio being switched on is a change worth reporting."""
+        if checked:
+            self.userEdited.emit()
 
     def _on_scheme_combo_changed(self, name):
         self.rebuild_metric_status_options(name)
         self.schemeChanged.emit(name)
+        self.userEdited.emit()
 
     # ------------------------------------------------------------------
     # Keyboard navigation
@@ -519,11 +534,17 @@ class LeftSidebar(QWidget):
         if focus:
             widget.setFocus()
 
-    def set_toggle(self, key: str, checked: bool) -> None:
+    def set_toggle(self, key: str, checked: bool, notify: bool = False) -> None:
+        """Set one checkbox.
+
+        Loading a row presents state and must stay silent, so signals are
+        blocked by default. ``notify=True`` lets the change behave like a
+        click — the companion counter follows it and listeners are told.
+        """
         box = self.toggle_boxes.get(key)
         if box is None:
             return
-        box.blockSignals(True)
+        box.blockSignals(not notify)
         box.setChecked(bool(checked))
         box.blockSignals(False)
 
@@ -581,10 +602,12 @@ class LeftSidebar(QWidget):
             buttons[index].setChecked(True)
 
     def clear_metric_status(self) -> None:
+        """Only ever reached from the keyboard, so it counts as an edit."""
         self.metric_status_group.setExclusive(False)
         for button in self.metric_status_buttons.values():
             button.setChecked(False)
         self.metric_status_group.setExclusive(True)
+        self.userEdited.emit()
 
     def set_scheme(self, name: str) -> None:
         self.scheme_combo.blockSignals(True)
@@ -633,6 +656,7 @@ class LeftSidebar(QWidget):
 
         for option in options:
             button = QRadioButton(str(option))
+            button.toggled.connect(self._on_metric_status_toggled)
             self.metric_status_group.addButton(button)
             self.metric_status_buttons[str(option)] = button
             self.metric_status_layout.addWidget(button)

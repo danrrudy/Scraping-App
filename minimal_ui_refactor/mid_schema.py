@@ -37,6 +37,53 @@ LEGACY_SOURCE_COLUMNS = (
     "Page",
 )
 
+def _join(parts: Iterable[str], separator: str) -> str:
+    """Join the parts that have a value, so a blank never leaves a stray gap."""
+    return separator.join(part for part in parts if part)
+
+
+#: How each row is named in the viewer, the logs, and exported filenames.
+#: ``{key: (dropdown label, formatter)}``; every formatter is called with the
+#: cleaned X value, Y value, and document filename, in that order.
+ENTRY_LABEL_FORMATS = {
+    "x_dash_y": ("X — Y", lambda x, y, document: _join((x, y), " — ")),
+    "x_paren_y": (
+        "X (Y)",
+        lambda x, y, document: f"{x} ({y})" if x and y else _join((x, y), " "),
+    ),
+    "x_space_y": ("X Y", lambda x, y, document: _join((x, y), " ")),
+    "xy": ("XY", lambda x, y, document: f"{x}{y}"),
+    "y_dash_x": ("Y — X", lambda x, y, document: _join((y, x), " — ")),
+    "document": ("Filename", lambda x, y, document: document),
+    "document_xy": (
+        "Filename (X — Y)",
+        lambda x, y, document: (
+            f"{document} ({_join((x, y), ' — ')})"
+            if document and (x or y)
+            else _join((document, x, y), " — ")
+        ),
+    ),
+}
+
+#: Composing X and Y with an em dash is what the application always did.
+DEFAULT_ENTRY_LABEL = "x_dash_y"
+
+
+def entry_label_choices() -> tuple[tuple[str, str], ...]:
+    """``(key, dropdown label)`` for every supported entry label format."""
+    return tuple((key, label) for key, (label, _) in ENTRY_LABEL_FORMATS.items())
+
+
+def normalize_entry_label(value: Any) -> str:
+    """Coerce a stored entry label key to one this version understands.
+
+    Settings files are hand-edited, so an unknown key falls back to the
+    default rather than stopping the application from starting.
+    """
+    key = clean_value(value)
+    return key if key in ENTRY_LABEL_FORMATS else DEFAULT_ENTRY_LABEL
+
+
 DEFAULT_MID_SCHEMA = {
     "xColumn": "agency",
     "yColumn": "year",
@@ -45,6 +92,7 @@ DEFAULT_MID_SCHEMA = {
     "pageColumn": "PDF Page Number",
     "formatColumn": "Format_Type_Updated",
     "keywordColumn": "Table Name/Word Search Keyword",
+    "entryLabel": DEFAULT_ENTRY_LABEL,
 }
 
 # These columns support the current review workflow. They are created in
@@ -65,7 +113,13 @@ WORKFLOW_COLUMN_DEFAULTS = {
     "reviewer_comments": "",
     "reviewer_status": "",
     "Page": "",
+    # Set once the user saves a change to a row, and kept in the exported MID
+    # so "which rows have I already been through?" survives closing the app.
+    "_edited": False,
 }
+
+#: The persistent per-row flag in :data:`WORKFLOW_COLUMN_DEFAULTS`.
+EDITED_COLUMN = "_edited"
 
 _INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
@@ -120,6 +174,8 @@ class MIDSchema:
     page_column: str = ""
     format_column: str = ""
     keyword_column: str = ""
+    #: Key into :data:`ENTRY_LABEL_FORMATS`; how rows are named on screen.
+    entry_label: str = DEFAULT_ENTRY_LABEL
 
     @classmethod
     def legacy(cls) -> "MIDSchema":
@@ -142,6 +198,7 @@ class MIDSchema:
             page_column=clean_value(data.get("pageColumn")),
             format_column=clean_value(data.get("formatColumn")),
             keyword_column=clean_value(data.get("keywordColumn")),
+            entry_label=normalize_entry_label(data.get("entryLabel")),
         )
         schema.validate_configuration()
         return schema
@@ -155,6 +212,7 @@ class MIDSchema:
             "pageColumn": self.page_column,
             "formatColumn": self.format_column,
             "keywordColumn": self.keyword_column,
+            "entryLabel": normalize_entry_label(self.entry_label),
         }
 
     def validate_configuration(self) -> None:
@@ -244,11 +302,13 @@ class MIDSchema:
         return clean_value(row.get(self.x_column)), clean_value(row.get(self.y_column))
 
     def observation_label(self, row: Mapping[str, Any]) -> str:
+        """Name this row the way the user asked for in MID settings."""
         x_value, y_value = self.observation_key(row)
-        if x_value or y_value:
-            return f"{x_value} — {y_value}"
+        document = self.document_name(row)
+        _, formatter = ENTRY_LABEL_FORMATS[normalize_entry_label(self.entry_label)]
+        label = clean_value(formatter(x_value, y_value, document))
         # Unassigned rows are still worth naming; fall back to the document.
-        return self.document_name(row) or "unidentified observation"
+        return label or document or "unidentified observation"
 
     def _identity_stem(self, row: Mapping[str, Any]) -> str:
         x_value, y_value = self.observation_key(row)

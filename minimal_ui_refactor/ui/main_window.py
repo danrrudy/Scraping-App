@@ -47,6 +47,9 @@ ACTION_HANDLERS = {
     "export_results": "export_review_results",
     "accept": "accept_scrape",
     "reject": "reject_scrape",
+    # Menu-only actions. They are declared here too so every UI action
+    # resolves through one table.
+    "first_unedited_entry": "goto_first_unedited_entry",
 }
 
 #: Single-key transfer shortcuts, in order. How many are bound is the
@@ -86,6 +89,10 @@ class MainWindowUI(QObject):
         self._content_payload = ""
         self._panel_actions = {}
         self._menu_initialized = False
+        #: File ▸ Entry. Kept as an attribute so per-entry controls can be
+        #: added to it without rebuilding the menu bar.
+        self.entry_menu = None
+        self.entry_edited_action = None
 
     # ------------------------------------------------------------------
     # Construction
@@ -138,6 +145,7 @@ class MainWindowUI(QObject):
         self._connect_if_present(self.left.schemeChanged, "on_scheme_changed")
         self._connect_if_present(self.left.toggleChanged, "on_toggle_changed")
         self._connect_if_present(self.left.counterChanged, "on_counter_changed")
+        self._connect_if_present(self.left.userEdited, "on_entry_edited_by_user")
 
     def _connect_if_present(self, signal, handler_name: str) -> None:
         handler = getattr(self.app, handler_name, None)
@@ -166,6 +174,28 @@ class MainWindowUI(QObject):
             lambda: getattr(self.app, "save_mid_to_file", lambda: None)()
         )
         file_menu.addAction(save_action)
+        file_menu.addSeparator()
+
+        unedited_action = QAction("Go to First &Unedited Entry", self.app)
+        unedited_action.setShortcut("Ctrl+U")
+        unedited_action.setStatusTip(
+            "Jump to the first MID row no change has ever been saved to."
+        )
+        unedited_action.triggered.connect(
+            lambda: self._dispatch_action("first_unedited_entry")
+        )
+        file_menu.addAction(unedited_action)
+
+        # Controls that act on the row currently open. Deliberately its own
+        # submenu so more per-entry actions have somewhere to go.
+        self.entry_menu = file_menu.addMenu("&Entry")
+        self.entry_edited_action = QAction("Mark as &Edited", self.app)
+        self.entry_edited_action.setCheckable(True)
+        self.entry_edited_action.setStatusTip(
+            "Whether this row counts as edited when jumping to unedited entries."
+        )
+        self.entry_edited_action.triggered.connect(self._on_entry_edited_toggled)
+        self.entry_menu.addAction(self.entry_edited_action)
 
         view_menu = menu_bar.addMenu("&View")
         group = QActionGroup(self.app)
@@ -182,6 +212,21 @@ class MainWindowUI(QObject):
         self._sync_panel_actions()
 
         self._menu_initialized = True
+
+    def _on_entry_edited_toggled(self, checked: bool) -> None:
+        handler = getattr(self.app, "set_entry_edited", None)
+        if callable(handler):
+            handler(checked)
+        else:
+            self._log("error", "Controller has no handler 'set_entry_edited'")
+
+    def set_entry_edited_checked(self, checked: bool) -> None:
+        """Show the current row's persistent edited flag, without firing it."""
+        if self.entry_edited_action is None:
+            return
+        self.entry_edited_action.blockSignals(True)
+        self.entry_edited_action.setChecked(bool(checked))
+        self.entry_edited_action.blockSignals(False)
 
     # ------------------------------------------------------------------
     # Keyboard
@@ -383,35 +428,56 @@ class MainWindowUI(QObject):
     # ------------------------------------------------------------------
     # Left sidebar - presenting state
     # ------------------------------------------------------------------
+    def _note_row_edit(self) -> None:
+        """Report a write to the widgets that hold the current row's values.
+
+        These setters block their widgets' signals, so a change made through
+        the façade would otherwise be invisible to the edit tracking. The
+        controller decides what to do with it: while it is presenting a row,
+        the report is ignored.
+        """
+        handler = getattr(self.app, "on_entry_edited_by_user", None)
+        if callable(handler):
+            handler()
+
     def set_field_text(self, key: str, value) -> None:
         self.left.set_field_text(key, value)
+        self._note_row_edit()
 
     def set_field_texts(self, values) -> None:
         self.left.set_field_texts(values)
+        self._note_row_edit()
 
     def clear_fields(self) -> None:
         self.left.clear_fields()
+        self._note_row_edit()
 
     def focus_field(self, key: str) -> None:
         self.left.focus_field(key)
 
     def set_notes_text(self, value) -> None:
         self.left.set_notes_text(value)
+        self._note_row_edit()
 
     def set_reviewer_notes_text(self, value) -> None:
         self.left.set_reviewer_notes_text(value)
+        self._note_row_edit()
 
-    def set_toggle(self, key: str, checked: bool) -> None:
-        self.left.set_toggle(key, checked)
+    def set_toggle(self, key: str, checked: bool, notify: bool = False) -> None:
+        self.left.set_toggle(key, checked, notify)
+        self._note_row_edit()
 
     def set_toggles(self, values) -> None:
         self.left.set_toggles(values)
+        self._note_row_edit()
 
     def set_counter(self, key: str, value) -> None:
         self.left.set_counter(key, value)
+        self._note_row_edit()
 
     def set_counters(self, values) -> None:
         self.left.set_counters(values)
+        self._note_row_edit()
 
     def set_counter_enabled(self, key: str, enabled: bool) -> None:
         self.left.set_counter_enabled(key, enabled)
@@ -433,9 +499,11 @@ class MainWindowUI(QObject):
 
     def set_metric_status(self, value) -> None:
         self.left.set_metric_status(value)
+        self._note_row_edit()
 
     def set_scheme(self, name: str) -> None:
         self.left.set_scheme(name)
+        self._note_row_edit()
 
     def set_scheme_options(self, classes, default_name: str = "") -> None:
         self.left.set_scheme_options(classes, default_name)

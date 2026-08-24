@@ -5,6 +5,7 @@ import re
 import pandas as pd
 from logger import setup_logger
 from mid_schema import (
+    EDITED_COLUMN,
     LEGACY_HIERARCHY_COLUMNS,
     LEGACY_SOURCE_COLUMNS,
     MIDSchema,
@@ -48,6 +49,7 @@ COLUMN_TYPES = {
     "years_to_evaluation": str,  # accepts str or int, ints are parsed out internally for consistency
     "reviewer_status": str,
     "Page": int,
+    "_edited": bool,
 }
 
 # Heirarchy Definition
@@ -68,11 +70,30 @@ class MIDManager:
         self.master_df = df
         self.view_indices = list(range(len(df)))
         self.df = df.copy()
-        self.current_index = 0
+        self._current_index = 0
         # Set whenever a value actually changes, cleared when the MID is
         # written out; drives the unsaved-changes prompt on restart.
         self._modified = False
+        # Set whenever a value on the *current* row changes, cleared on every
+        # move to another row. Purely in-memory: it is what tells a navigation
+        # away from an untouched row not to write over it.
+        self._entry_dirty = False
         self.logger.info("Initialized MIDManager")
+
+    # ------------------------------------------------------------------
+    # Current row
+    # ------------------------------------------------------------------
+    @property
+    def current_index(self) -> int:
+        return self._current_index
+
+    @current_index.setter
+    def current_index(self, value) -> None:
+        """Moving to another row abandons the edit tracking for the old one."""
+        value = int(value)
+        if value != self._current_index:
+            self._entry_dirty = False
+        self._current_index = value
 
     def load_mid(self, path, sheet_name=0):
         """Loads and validates the Master Input Document (MID) Excel file."""
@@ -473,6 +494,8 @@ class MIDManager:
             new_row["_achieved"] = False
         if "_future_dated" in new_row:
             new_row["_future_dated"] = False
+        # A row that has just been created has not been edited by anyone yet.
+        new_row[EDITED_COLUMN] = False
         return new_row
 
     def ensure_gen_flag(self):
@@ -695,6 +718,8 @@ class MIDManager:
 
             # Mark generated rows (your code already uses _gen in multiple places)
             r["_gen"] = True
+            # A row that has just been created has not been edited by anyone yet.
+            r[EDITED_COLUMN] = False
 
             if clear_helpers:
                 # Clear common workflow/helper fields if present; keep non-hierarchy metadata intact.
@@ -800,8 +825,26 @@ class MIDManager:
             self.master_df.at[mpos, col], value
         ):
             self._modified = True
+            self._entry_dirty = True
         self.master_df.at[mpos, col] = value
         self.df.at[view_pos, col] = value
+
+    def pending_changes(self, view_pos: int, values) -> dict:
+        """Which of ``values`` would actually change row ``view_pos``.
+
+        Lets a caller decide whether a row is worth writing to at all, rather
+        than rewriting every field and discovering afterwards that nothing
+        moved.
+        """
+        mpos = self._master_pos(view_pos)
+        if self.master_df is None or mpos is None:
+            return {}
+        return {
+            col: value
+            for col, value in dict(values).items()
+            if col not in self.master_df.columns
+            or self._is_edit(self.master_df.at[mpos, col], value)
+        }
 
     @staticmethod
     def _is_edit(current, value) -> bool:
@@ -826,3 +869,82 @@ class MIDManager:
 
     def mark_modified(self) -> None:
         self._modified = True
+
+    # ------------------------------------------------------------------
+    # Per-entry edit tracking
+    # ------------------------------------------------------------------
+    def entry_is_dirty(self) -> bool:
+        """Whether the current row has been changed since it was opened.
+
+        In-memory only, and never written to the MID; the persistent record of
+        the same idea is :data:`~mid_schema.EDITED_COLUMN`.
+        """
+        return self._entry_dirty
+
+    def mark_entry_dirty(self) -> None:
+        self._entry_dirty = True
+
+    def clear_entry_dirty(self) -> None:
+        self._entry_dirty = False
+
+    def _ensure_edited_column(self) -> None:
+        """Guarantee the persistent flag exists, for MIDs saved before it did."""
+        for frame in (self.master_df, self.df):
+            if frame is not None and EDITED_COLUMN not in frame.columns:
+                frame[EDITED_COLUMN] = False
+
+    def is_entry_edited(self, index=None) -> bool:
+        """Whether a saved change has ever been made to this row."""
+        row = self._resolve_row(index)
+        if row is None:
+            return False
+        return bool(row.get(EDITED_COLUMN, False))
+
+    def set_entry_edited(self, value: bool = True, view_pos: int | None = None) -> bool:
+        """Write the persistent edited flag. Returns the value it now holds.
+
+        Deliberately not routed through :meth:`set_value`: the flag records
+        that the row was edited, it is not itself one of the row's edits.
+        """
+        if self.master_df is None:
+            return False
+        if view_pos is None:
+            view_pos = self.current_index
+        mpos = self._master_pos(view_pos)
+        if mpos is None:
+            return False
+
+        self._ensure_edited_column()
+        value = bool(value)
+        if bool(self.master_df.at[mpos, EDITED_COLUMN]) != value:
+            self._modified = True
+        self.master_df.at[mpos, EDITED_COLUMN] = value
+        if self.df is not None and 0 <= view_pos < len(self.df):
+            self.df.at[view_pos, EDITED_COLUMN] = value
+        return value
+
+    def toggle_entry_edited(self, view_pos: int | None = None) -> bool:
+        """Flip the persistent edited flag. Returns the value it now holds."""
+        if view_pos is None:
+            view_pos = self.current_index
+        return self.set_entry_edited(not self.is_entry_edited(view_pos), view_pos)
+
+    def first_unedited_index(self, start: int = 0) -> int | None:
+        """View position of the first row at or after ``start`` not yet edited.
+
+        ``None`` when every row from ``start`` onwards has been edited.
+        """
+        if self.df is None or self.df.empty:
+            return None
+        self._ensure_edited_column()
+        for view_pos in range(max(0, int(start)), len(self.df)):
+            if not bool(self.df.at[view_pos, EDITED_COLUMN]):
+                return view_pos
+        return None
+
+    def unedited_count(self) -> int:
+        """How many rows in the current view have never been edited."""
+        if self.df is None or self.df.empty:
+            return 0
+        self._ensure_edited_column()
+        return int((~self.df[EDITED_COLUMN].astype(bool)).sum())

@@ -143,6 +143,10 @@ class TextScrapingReviewApp(QMainWindow):
         self.current_observation_label = ""
         self.current_observation_stem = "observation"
         self.current_document_name = ""
+        # True while a row is being presented in the sidebar. Widgets that
+        # slip a signal through while they are being filled in must not be
+        # mistaken for the user typing.
+        self._loading_entry = False
 
         self.manual_review = {  # Structure for tracking user Accept/Rejects (will likely be changed)
             "active_test": None,
@@ -431,6 +435,13 @@ class TextScrapingReviewApp(QMainWindow):
                     f"'{definition['target']}', which is not an editable field"
                 )
                 continue
+            checkbox = definition.get("checkbox", "")
+            if checkbox and not self.checkbox_key_for(checkbox):
+                # The button still works; only its checkbox link is dropped.
+                self.logger.warning(
+                    f"Button '{definition['label']}' is linked to checkbox "
+                    f"'{checkbox}', which is not one of the configured checkboxes"
+                )
             specs.append(
                 FieldButtonSpec(
                     key=definition["key"],
@@ -535,6 +546,7 @@ class TextScrapingReviewApp(QMainWindow):
         self.ui.set_entry_position(
             self.mid_manager.current_index + 1, len(self.mid_manager.view_indices)
         )
+        self.ui.set_entry_edited_checked(self.mid_manager.is_entry_edited())
         self.ui.set_info_values(
             {
                 "x": x_value,
@@ -750,6 +762,8 @@ class TextScrapingReviewApp(QMainWindow):
             session.set_text(self.current_page_index, self.ui.content())
             self.logger.debug("Next page is valid")
             self.current_page_index += 1
+            # The page is written into the row, so moving is an edit to it.
+            self.mark_entry_dirty()
             self.show_page()
         else:
             self.logger.warning("Attempted to load invalid page")
@@ -762,6 +776,7 @@ class TextScrapingReviewApp(QMainWindow):
             session.set_text(self.current_page_index, self.ui.content())
             self.logger.debug("Previous page is valid")
             self.current_page_index -= 1
+            self.mark_entry_dirty()
             self.show_page()
         else:
             self.logger.warning("Attempted to load invalid page")
@@ -967,6 +982,74 @@ class TextScrapingReviewApp(QMainWindow):
         row = self.mid_manager.get_current_row()
         self.mid_manager.duplicate_prior_year()
         self.update_info_labels()
+
+    # ------------------------------------------------------------------
+    # Entry edit tracking
+    # ------------------------------------------------------------------
+    def mark_entry_dirty(self):
+        """Record that the user has changed something about the current row.
+
+        Ignored while a row is being loaded, so presenting a row is never
+        mistaken for editing it.
+        """
+        manager = getattr(self, "mid_manager", None)
+        if manager is None or self._loading_entry:
+            return
+        manager.mark_entry_dirty()
+
+    def on_entry_edited_by_user(self):
+        """Any sidebar widget the user touched reports through here."""
+        self.mark_entry_dirty()
+
+    def set_entry_edited(self, edited: bool = True):
+        """Set the current row's persistent edited flag by hand."""
+        manager = getattr(self, "mid_manager", None)
+        if manager is None or manager.get_current_row() is None:
+            return
+        value = manager.set_entry_edited(bool(edited))
+        self.ui.set_entry_edited_checked(value)
+        state = "edited" if value else "unedited"
+        self.logger.info(
+            f"Marked {self.current_observation_label} "
+            f"(row {manager.current_index}) as {state}"
+        )
+        self.ui.set_status_message(f"Entry marked as {state}.", 3000)
+
+    def goto_first_unedited_entry(self):
+        """Jump to the topmost row no change has ever been saved to."""
+        manager = getattr(self, "mid_manager", None)
+        if manager is None or manager.df is None:
+            return
+        self._commit_sidebar_fields()
+
+        target = manager.first_unedited_index()
+        if target is None:
+            self.logger.info("No unedited MID entries remain")
+            QMessageBox.information(
+                self,
+                "No Unedited Entries",
+                "Every entry in the current view has been edited.",
+            )
+            return
+
+        if target == manager.current_index:
+            self.ui.set_status_message(
+                "This is already the first unedited entry.", 3000
+            )
+            return
+
+        manager.select_mid_entry(target)
+        self.load_mid_entry_document()
+        self.update_info_labels()
+        self.show_page()
+        remaining = manager.unedited_count()
+        self.logger.info(
+            f"Jumped to first unedited entry at row {target} "
+            f"({remaining} unedited entries in view)"
+        )
+        self.ui.set_status_message(
+            f"Entry {target + 1} — {remaining} unedited entries in this view.", 5000
+        )
 
     # Handle any missing entries or pages that can't be loaded
     def advance_to_valid_entry(self, direction="next"):
@@ -1518,52 +1601,108 @@ class TextScrapingReviewApp(QMainWindow):
         return True
 
     # Primary function for saving current editor state into the MID
-    def _commit_sidebar_fields(self):
+    def _commit_sidebar_fields(self) -> bool:
+        """Write the sidebar into the current MID row, if it is worth writing.
+
+        The sidebar is committed on every navigation, so an untouched row
+        would otherwise be rewritten — and stamped as edited — merely by being
+        looked at. Nothing is written unless the user changed something *and*
+        that change actually differs from what the row already holds.
+
+        Returns whether the row was written to.
+        """
         if not hasattr(self, "mid_manager") or self.mid_manager.df is None:
-            return
+            return False
         # set_value converts view->master, so the view index is what we pass.
         idx = self.mid_manager.current_index
         if idx is None:
-            return
+            return False
+
+        # Staged rather than written, so that a row nobody touched can be left
+        # exactly as it was.
+        staged: dict[str, object] = {}
+
+        def commit(column, value):
+            staged[column] = value
 
         for key, value in self.ui.field_texts().items():
-            self.mid_manager.set_value(idx, key, value)
+            commit(key, value)
 
         toggles = self.ui.toggles()
         counters = self.ui.counters()
         for definition in self.checkbox_specs:
             key = definition["key"]
             checked = bool(toggles.get(key, False))
-            self.mid_manager.set_value(idx, definition["column"], checked)
+            commit(definition["column"], checked)
 
             counter = definition["counter"]
             if counter:
                 value = int(counters.get(key, 0) or 0)
                 # A counter only means something while its checkbox is ticked.
-                self.mid_manager.set_value(
-                    idx, counter["column"], str(value) if checked and value else ""
-                )
+                commit(counter["column"], str(value) if checked and value else "")
 
-        self.logger.info(f"Saved information for {self.current_observation_label}: ")
+        commit(
+            "classification_scheme", self._safe_text(self.ui.scheme_name()).strip()
+        )
+        commit("metric_status", self._safe_text(self.ui.metric_status()))
+        commit("notes", self.ui.notes_text())
+        commit("Page", self.current_page_number())
 
-        self.mid_manager.set_value(
-            idx, "classification_scheme", self._safe_text(self.ui.scheme_name()).strip()
-        )
-        self.mid_manager.set_value(
-            idx, "metric_status", self._safe_text(self.ui.metric_status())
-        )
-        self.mid_manager.set_value(idx, "notes", self.ui.notes_text())
-        self.mid_manager.set_value(idx, "Page", self.current_page_number())
+        # Read before anything is written: marking a row seen below would
+        # otherwise look like an edit the user made.
+        user_edited = self.mid_manager.entry_is_dirty()
 
         if self.mode.lower() == "reviewer":
-            self.mid_manager.set_value(
-                idx, "reviewer_comments", self.ui.reviewer_notes_text()
-            )
+            commit("reviewer_comments", self.ui.reviewer_notes_text())
+            # Marking a row seen is the reviewer workflow's own record of
+            # having visited it, not something the user typed, so it happens
+            # whether or not they changed anything.
             if self.mid_manager.df.at[idx, "reviewer_status"] not in [
                 "ACCEPT",
                 "REJECT",
             ]:
                 self.mid_manager.set_value(idx, "reviewer_status", "SEEN")
+                if not user_edited:
+                    self.mid_manager.clear_entry_dirty()
+
+        if not user_edited:
+            self.logger.debug(
+                f"No user edits to {self.current_observation_label} "
+                f"(row {idx}); left unchanged"
+            )
+            return False
+
+        saved = self.mid_manager.pending_changes(idx, staged)
+        if not saved:
+            self.logger.debug(
+                f"Edits to {self.current_observation_label} (row {idx}) "
+                "matched the stored values; left unchanged"
+            )
+            return False
+
+        for column, value in saved.items():
+            self.mid_manager.set_value(idx, column, value)
+        # A saved change is what the persistent flag records.
+        self.mid_manager.set_entry_edited(True, idx)
+        self.ui.set_entry_edited_checked(True)
+
+        details = ", ".join(
+            f"{column}={self._format_for_log(value)}" for column, value in saved.items()
+        )
+        self.logger.info(
+            f"Saved information for {self.current_observation_label} "
+            f"(row {idx}): {details}"
+        )
+        return True
+
+    @staticmethod
+    def _format_for_log(value, limit: int = 120) -> str:
+        """Render one committed cell value as a single, bounded log fragment."""
+        text = "" if value is None else str(value)
+        text = " ".join(text.split())
+        if len(text) > limit:
+            text = text[: limit - 1] + "…"
+        return repr(text) if isinstance(value, str) else text
 
     def _goto_index(self, new_idx: int):
         """Move to a MID row and refresh everything the sidebar shows."""
@@ -1612,6 +1751,18 @@ class TextScrapingReviewApp(QMainWindow):
 
     def load_mid_fields_from_row(self):
         """Present the current MID row in the sidebar."""
+        self._loading_entry = True
+        try:
+            self._present_mid_row()
+        finally:
+            self._loading_entry = False
+            # Filling the widgets is not editing; whatever they emitted on the
+            # way in does not count.
+            manager = getattr(self, "mid_manager", None)
+            if manager is not None:
+                manager.clear_entry_dirty()
+
+    def _present_mid_row(self):
         manager = getattr(self, "mid_manager", None)
         row = manager.get_current_row() if manager is not None else None
         if row is None:
@@ -1660,8 +1811,27 @@ class TextScrapingReviewApp(QMainWindow):
         except ValueError:
             return 0
 
+    def checkbox_key_for(self, name: str) -> str:
+        """The toggle key a button's ``checkbox`` setting refers to.
+
+        Settings may name a checkbox either way round — by the key code uses
+        or by the MID column it writes to — so both are accepted.
+        """
+        name = self._safe_text(name).strip()
+        if not name:
+            return ""
+        for definition in self.checkbox_specs:
+            if name in (definition["key"], definition["column"]):
+                return definition["key"]
+        return ""
+
     def on_field_button_clicked(self, key: str):
-        """Compute one editable field from the others and write it in."""
+        """Compute one editable field from the others and write it in.
+
+        A button may also be linked to a checkbox, which it sets in the same
+        press — but only once the formula has succeeded, so a failed press
+        leaves the row exactly as it was.
+        """
         definition = next(
             (item for item in self.field_button_specs if item["key"] == key), None
         )
@@ -1680,10 +1850,47 @@ class TextScrapingReviewApp(QMainWindow):
 
         text = field_formula.format_result(result, definition["decimals"])
         self.ui.set_field_text(definition["target"], text)
-        self.ui.set_status_message(
-            f"{definition['target']} = {text}  ({definition['expression']})", 4000
-        )
+        message = f"{definition['target']} = {text}  ({definition['expression']})"
+
+        toggled = self._apply_button_checkbox(definition)
+        if toggled:
+            message += f"  [{toggled}]"
+        self.ui.set_status_message(message, 4000)
         self.ui.refresh_highlights()
+
+    def _apply_button_checkbox(self, definition) -> str:
+        """Set the checkbox a button is linked to; report what it did.
+
+        Returns a description for the status bar, or ``""`` when the button
+        has no checkbox linked.
+        """
+        toggle_key = self.checkbox_key_for(definition.get("checkbox", ""))
+        if not toggle_key:
+            return ""
+
+        action = definition.get("checkbox_action", "check")
+        if action == "toggle":
+            checked = not self.ui.is_toggled(toggle_key)
+        else:
+            checked = action != "uncheck"
+
+        # notify=True so the checkbox behaves exactly as if it were clicked:
+        # its companion counter follows, and the usual listeners run.
+        self.ui.set_toggle(toggle_key, checked, notify=True)
+
+        label = next(
+            (
+                item["label"]
+                for item in self.checkbox_specs
+                if item["key"] == toggle_key
+            ),
+            toggle_key,
+        )
+        self.logger.info(
+            f"Button '{definition['label']}' "
+            f"{'checked' if checked else 'unchecked'} {label}"
+        )
+        return f"{label} {'checked' if checked else 'unchecked'}"
 
     def on_toggle_changed(self, key: str, checked: bool):
         """React to any sidebar checkbox. The UI owns dependent widget state."""

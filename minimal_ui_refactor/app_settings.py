@@ -113,6 +113,15 @@ def normalize_checkboxes(value):
     return definitions
 
 
+#: What a button may do to the checkbox it is linked to.
+CHECKBOX_ACTIONS = ("check", "uncheck", "toggle")
+
+
+def _normalize_checkbox_action(value):
+    action = _clean(value).lower()
+    return action if action in CHECKBOX_ACTIONS else "check"
+
+
 def normalize_field_buttons(value):
     """Fill in the derivable parts of each computed-button definition.
 
@@ -121,6 +130,13 @@ def normalize_field_buttons(value):
 
         {"label": "10%", "target": "Match",
          "expression": "LMIG_Exp * 0.10", "decimals": 2}
+
+    It may also tick a checkbox in the same press. ``checkbox`` names the
+    checkbox by its key or its MID column, and ``checkbox_action`` is one of
+    :data:`CHECKBOX_ACTIONS`:
+
+        {"label": "Sum", "target": "Total_Exp",
+         "expression": "LMIG_Exp + Match", "checkbox": "_aggregate"}
 
     Entries missing a label, target, or expression are dropped rather than
     raising, so a hand-edited settings file cannot stop the app from starting.
@@ -151,6 +167,8 @@ def normalize_field_buttons(value):
         except (TypeError, ValueError):
             decimals = 2
 
+        checkbox = _clean(entry.get("checkbox"))
+        action = _normalize_checkbox_action(entry.get("checkbox_action"))
         definitions.append(
             {
                 "key": key,
@@ -158,12 +176,27 @@ def normalize_field_buttons(value):
                 "target": target,
                 "expression": expression,
                 "decimals": min(6, max(0, decimals)),
+                "checkbox": checkbox,
+                "checkbox_action": action,
                 "tooltip": _clean(entry.get("tooltip"))
-                or f"{target} = {expression}",
+                or field_button_summary(target, expression, checkbox, action),
             }
         )
 
     return definitions
+
+
+#: How each action reads in a tooltip.
+_ACTION_VERBS = {"check": "checks", "uncheck": "unchecks", "toggle": "toggles"}
+
+
+def field_button_summary(target, expression, checkbox="", action="check"):
+    """One line describing what a button does, for tooltips and list rows."""
+    summary = f"{target} = {expression}"
+    if checkbox:
+        verb = _ACTION_VERBS[_normalize_checkbox_action(action)]
+        summary += f", {verb} {checkbox}"
+    return summary
 
 
 def _slug(value):

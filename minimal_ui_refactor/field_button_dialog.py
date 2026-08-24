@@ -1,8 +1,10 @@
 """Dialog for defining buttons that compute one editable field from the others.
 
-A button names a target field and an arithmetic expression over the editable
-fields — ``Match = LMIG_Exp * 0.10``. Expressions are checked here so a broken
-one is caught where it is written rather than when it is pressed.
+A button names a target field and an expression over the editable fields —
+``Match = LMIG_Exp * 0.10``, or ``Slug = snake(Gov & " " & FY)``. It may also
+be linked to one of the sidebar checkboxes, which it sets in the same press.
+Expressions are checked here so a broken one is caught where it is written
+rather than when it is pressed.
 """
 
 from __future__ import annotations
@@ -25,7 +27,11 @@ from PyQt5.QtWidgets import (
 )
 
 import field_formula
-from app_settings import normalize_field_buttons
+from app_settings import (
+    field_button_summary,
+    normalize_checkboxes,
+    normalize_field_buttons,
+)
 from logger import setup_logger
 from mid_schema import MIDSchema
 
@@ -41,6 +47,7 @@ class FieldButtonDialog(QDialog):
 
         self.settings = settings
         self.definitions = normalize_field_buttons(settings.get("fieldButtons"))
+        self.checkboxes = normalize_checkboxes(settings.get("checkboxes"))
         self.updated_settings = {}
         self._loading = False
 
@@ -65,14 +72,18 @@ class FieldButtonDialog(QDialog):
 
         explanation = QLabel(
             "Each button computes a value from the editable fields and writes "
-            "it into one of them. Formulas may use the field names below, "
-            "numbers, + - * / % **, and abs / min / max / round."
+            "it into one of them, and can tick a checkbox at the same time.\n"
+            "Numbers: + - * / % ** and abs / min / max / round.\n"
+            'Text: & joins pieces together (Gov & " " & FY), and '
+            "concat / lower / upper / title / sentence / camel / pascal / "
+            "snake / kebab / trim / replace are available — for example "
+            'replace(Notes, ",", "-").'
         )
         explanation.setWordWrap(True)
         layout.addWidget(explanation)
 
         available = QLabel(
-            "Available: "
+            "Fields: "
             + (", ".join(sorted(self.variables)) or "no editable fields configured")
         )
         available.setWordWrap(True)
@@ -125,11 +136,31 @@ class FieldButtonDialog(QDialog):
         self.decimals_spin = QSpinBox()
         self.decimals_spin.setRange(0, 6)
         self.decimals_spin.setValue(2)
+        self.decimals_spin.setToolTip(
+            "Applies to a number the formula works out. A text result is "
+            "written exactly as the formula produces it."
+        )
+
+        # Optional checkbox link: the button sets this box as it writes.
+        self.checkbox_combo = QComboBox()
+        self.checkbox_combo.addItem("(none)", "")
+        for definition in self.checkboxes:
+            self.checkbox_combo.addItem(definition["label"], definition["column"])
+
+        self.action_combo = QComboBox()
+        for label, action in (
+            ("Check it", "check"),
+            ("Uncheck it", "uncheck"),
+            ("Toggle it", "toggle"),
+        ):
+            self.action_combo.addItem(label, action)
 
         form.addRow("Button text:", self.label_edit)
         form.addRow("Writes into:", self.target_combo)
         form.addRow("Formula:", self.expression_edit)
         form.addRow("Decimal places:", self.decimals_spin)
+        form.addRow("Also sets:", self.checkbox_combo)
+        form.addRow("Checkbox action:", self.action_combo)
 
         self.status_label = QLabel("")
         self.status_label.setWordWrap(True)
@@ -139,6 +170,8 @@ class FieldButtonDialog(QDialog):
         self.expression_edit.textChanged.connect(self._commit_editor)
         self.target_combo.currentTextChanged.connect(self._commit_editor)
         self.decimals_spin.valueChanged.connect(self._commit_editor)
+        self.checkbox_combo.currentIndexChanged.connect(self._commit_editor)
+        self.action_combo.currentIndexChanged.connect(self._commit_editor)
 
         group.setLayout(form)
         return group
@@ -153,8 +186,13 @@ class FieldButtonDialog(QDialog):
         for definition in self.definitions:
             self.list_widget.addItem(
                 QListWidgetItem(
-                    f"{definition['label']}:  {definition['target']} = "
-                    f"{definition['expression']}"
+                    f"{definition['label']}:  "
+                    + field_button_summary(
+                        definition["target"],
+                        definition["expression"],
+                        self._checkbox_label(definition.get("checkbox", "")),
+                        definition.get("checkbox_action", "check"),
+                    )
                 )
             )
         self._loading = False
@@ -176,6 +214,7 @@ class FieldButtonDialog(QDialog):
             self.target_combo,
             self.expression_edit,
             self.decimals_spin,
+            self.checkbox_combo,
         ):
             widget.setEnabled(enabled)
 
@@ -187,8 +226,33 @@ class FieldButtonDialog(QDialog):
         if target and self.target_combo.findText(target) < 0:
             self.target_combo.addItem(target)
         self.target_combo.setCurrentText(target)
+
+        checkbox = definition.get("checkbox", "")
+        index = self.checkbox_combo.findData(checkbox)
+        self.checkbox_combo.setCurrentIndex(max(0, index))
+        action = self.action_combo.findData(
+            definition.get("checkbox_action", "check")
+        )
+        self.action_combo.setCurrentIndex(max(0, action))
         self._loading = False
+        self._update_action_enabled()
         self._check_expression()
+
+    def _update_action_enabled(self):
+        """The action only means something once a checkbox is chosen."""
+        self.action_combo.setEnabled(
+            self.checkbox_combo.isEnabled()
+            and bool(self.checkbox_combo.currentData())
+        )
+
+    def _checkbox_label(self, column) -> str:
+        """The checkbox's own label, for the list row and tooltip."""
+        if not column:
+            return ""
+        index = self.checkbox_combo.findData(column)
+        if index > 0:
+            return self.checkbox_combo.itemText(index)
+        return f"{column} (missing)"
 
     def _commit_editor(self):
         if self._loading:
@@ -202,8 +266,16 @@ class FieldButtonDialog(QDialog):
         definition["target"] = self.target_combo.currentText().strip()
         definition["expression"] = self.expression_edit.text().strip()
         definition["decimals"] = self.decimals_spin.value()
-        definition["tooltip"] = f"{definition['target']} = {definition['expression']}"
+        definition["checkbox"] = self.checkbox_combo.currentData() or ""
+        definition["checkbox_action"] = self.action_combo.currentData() or "check"
+        definition["tooltip"] = field_button_summary(
+            definition["target"],
+            definition["expression"],
+            self._checkbox_label(definition["checkbox"]),
+            definition["checkbox_action"],
+        )
 
+        self._update_action_enabled()
         self._refresh_list()
         self._check_expression()
 
@@ -239,6 +311,8 @@ class FieldButtonDialog(QDialog):
                 "target": self.fields[0] if self.fields else "",
                 "expression": "",
                 "decimals": 2,
+                "checkbox": "",
+                "checkbox_action": "check",
                 "tooltip": "",
             }
         )

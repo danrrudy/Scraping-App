@@ -121,6 +121,90 @@ def test_an_empty_field_is_reported_rather_than_treated_as_zero():
         field_formula.evaluate("LMIG_Exp * 0.10", values)
 
 
+# ----------------------------------------------------------------------
+# Text formulas
+# ----------------------------------------------------------------------
+@pytest.fixture
+def text_values():
+    return field_formula.field_values(
+        {"Gov": "city of ann arbor", "FY": "2024", "Notes": "a,b,c", "Match": "1000"}
+    )
+
+
+def test_ampersand_joins_fields_and_literals(text_values):
+    assert (
+        field_formula.evaluate('Gov & " FY" & FY', text_values)
+        == "city of ann arbor FY2024"
+    )
+    assert (
+        field_formula.evaluate('concat(Gov, " FY", FY)', text_values)
+        == "city of ann arbor FY2024"
+    )
+
+
+@pytest.mark.parametrize(
+    ("expression", "expected"),
+    [
+        ("upper(Gov)", "CITY OF ANN ARBOR"),
+        ("lower('MiXeD')", "mixed"),
+        ("title(Gov)", "City Of Ann Arbor"),
+        ("sentence(Gov)", "City of ann arbor"),
+        ("camel(Gov)", "cityOfAnnArbor"),
+        ("pascal(Gov)", "CityOfAnnArbor"),
+        ("snake(Gov)", "city_of_ann_arbor"),
+        ("kebab(Gov)", "city-of-ann-arbor"),
+        ("trim('  padded  ')", "padded"),
+    ],
+)
+def test_case_changing_functions(text_values, expression, expected):
+    assert field_formula.evaluate(expression, text_values) == expected
+
+
+def test_case_changes_split_an_existing_camel_case_name():
+    values = field_formula.field_values({"Gov": "LMIGExpTotal"})
+    assert field_formula.evaluate("snake(Gov)", values) == "lmig_exp_total"
+    assert field_formula.evaluate("kebab(Gov)", values) == "lmig-exp-total"
+
+
+def test_replacement_swaps_every_occurrence(text_values):
+    assert field_formula.evaluate('replace(Notes, ",", "-")', text_values) == "a-b-c"
+    assert field_formula.evaluate('replace(Notes, ",", "")', text_values) == "abc"
+
+    with pytest.raises(FormulaError, match="empty string"):
+        field_formula.evaluate('replace(Notes, "", "-")', text_values)
+
+
+def test_a_number_used_as_text_loses_its_trailing_zeros(text_values):
+    assert field_formula.evaluate('"n=" & (Match * 2)', text_values) == "n=2000"
+    assert field_formula.evaluate('"n=" & (Match / 8)', text_values) == "n=125"
+    assert field_formula.evaluate('"n=" & (Match / 3)', text_values).startswith(
+        "n=333.33"
+    )
+
+
+def test_text_results_ignore_the_decimal_setting():
+    assert field_formula.format_result("Ann Arbor", 2) == "Ann Arbor"
+
+
+def test_plus_stays_arithmetic_and_says_so(text_values):
+    # Gov holds text, so "+" is a mistake; the message points at "&".
+    with pytest.raises(FormulaError, match="empty or is not a number"):
+        field_formula.evaluate("Gov + FY", text_values)
+    with pytest.raises(FormulaError, match="Use & or concat"):
+        field_formula.evaluate('"a" + "b"', text_values)
+
+    # Two numeric fields still add rather than joining.
+    assert field_formula.evaluate("FY + Match", text_values) == 3024.0
+
+
+def test_text_and_number_formulas_both_validate_against_the_columns():
+    field_formula.validate('snake(Gov & "-" & FY)', ["Gov", "FY"])
+    field_formula.validate('replace(Notes, ",", "-")', ["Notes"])
+
+    with pytest.raises(FormulaError, match="not one of the editable fields"):
+        field_formula.validate("upper(Nope)", ["Gov"])
+
+
 def test_validation_catches_a_bad_formula_without_any_values():
     field_formula.validate("LMIG_Exp * 0.10", ["LMIG_Exp", "Match"])
 
@@ -161,6 +245,46 @@ def test_repeated_button_labels_still_get_distinct_keys():
         ]
     )
     assert [item["key"] for item in definitions] == ["10", "10_2"]
+
+
+def test_a_button_can_name_the_checkbox_it_also_sets():
+    definitions = normalize_field_buttons(
+        [
+            {
+                "label": "Sum",
+                "target": "Total_Exp",
+                "expression": "LMIG_Exp + Match",
+                "checkbox": "_aggregate",
+                "checkbox_action": "toggle",
+            }
+        ]
+    )
+    assert definitions[0]["checkbox"] == "_aggregate"
+    assert definitions[0]["checkbox_action"] == "toggle"
+    assert definitions[0]["tooltip"] == (
+        "Total_Exp = LMIG_Exp + Match, toggles _aggregate"
+    )
+
+
+def test_a_button_without_a_checkbox_keeps_its_plain_tooltip():
+    definition = normalize_field_buttons(LMIG_BUTTONS)[0]
+    assert definition["checkbox"] == ""
+    assert definition["tooltip"] == "Match = LMIG_Exp * 0.10"
+
+
+def test_an_unreadable_checkbox_action_falls_back_to_checking():
+    definitions = normalize_field_buttons(
+        [
+            {
+                "label": "Sum",
+                "target": "Match",
+                "expression": "1",
+                "checkbox": "_flag",
+                "checkbox_action": "burn it down",
+            }
+        ]
+    )
+    assert definitions[0]["checkbox_action"] == "check"
 
 
 def test_checkbox_definitions_fill_in_their_own_keys_and_labels():
@@ -268,6 +392,143 @@ def test_a_button_targeting_an_unknown_field_is_skipped(lmig_app):
         buttons=[{"label": "Bad", "target": "not_a_field", "expression": "1"}]
     )
     assert window.ui.left.field_buttons == {}
+
+
+# ----------------------------------------------------------------------
+# Buttons that also set a checkbox
+# ----------------------------------------------------------------------
+AGGREGATE_CHECKBOXES = [
+    {"column": "_flag", "label": "Flag"},
+    {
+        "column": "_aggregate",
+        "label": "Aggregate",
+        "counter": {"column": "years_to_evaluation", "label": "Years:"},
+    },
+]
+
+
+def linked_button(action="check", checkbox="_aggregate"):
+    return [
+        {
+            "label": "Sum",
+            "key": "sum",
+            "target": "Total_Exp",
+            "expression": "LMIG_Exp + Local_Exp",
+            "decimals": 0,
+            "checkbox": checkbox,
+            "checkbox_action": action,
+        }
+    ]
+
+
+@pytest.mark.qt
+@pytest.mark.integration
+def test_a_button_can_tick_a_checkbox_as_it_writes_its_field(lmig_app):
+    window = lmig_app(buttons=linked_button(), checkboxes=AGGREGATE_CHECKBOXES)
+    window.ui.set_field_text("LMIG_Exp", "1000")
+    window.ui.set_field_text("Local_Exp", "500")
+
+    window.ui.left.field_buttons["sum"].click()
+
+    assert window.ui.field_text("Total_Exp") == "1500"
+    assert window.ui.toggles()["aggregate"] is True
+    # The checkbox owns its counter, so linking must wake the counter too.
+    assert window.ui.left.counter_boxes["aggregate"].isEnabled() is True
+
+    window._commit_sidebar_fields()
+    row = window.mid_manager.master_df.iloc[0]
+    assert row["Total_Exp"] == "1500"
+    assert bool(row["_aggregate"]) is True
+
+
+@pytest.mark.qt
+@pytest.mark.integration
+def test_a_linked_button_can_untick_or_flip_the_checkbox(lmig_app):
+    window = lmig_app(
+        buttons=linked_button("toggle"), checkboxes=AGGREGATE_CHECKBOXES
+    )
+    window.ui.set_field_text("LMIG_Exp", "1000")
+    window.ui.set_field_text("Local_Exp", "500")
+
+    window.ui.left.field_buttons["sum"].click()
+    assert window.ui.toggles()["aggregate"] is True
+    window.ui.left.field_buttons["sum"].click()
+    assert window.ui.toggles()["aggregate"] is False
+
+    window = lmig_app(
+        buttons=linked_button("uncheck"), checkboxes=AGGREGATE_CHECKBOXES
+    )
+    window.ui.set_field_text("LMIG_Exp", "1000")
+    window.ui.set_field_text("Local_Exp", "500")
+    window.ui.set_toggle("aggregate", True)
+
+    window.ui.left.field_buttons["sum"].click()
+    assert window.ui.toggles()["aggregate"] is False
+
+
+@pytest.mark.qt
+@pytest.mark.integration
+def test_a_failed_formula_leaves_the_linked_checkbox_alone(lmig_app):
+    window = lmig_app(buttons=linked_button(), checkboxes=AGGREGATE_CHECKBOXES)
+    # Local_Exp is still empty, so the formula cannot run.
+    window.ui.set_field_text("LMIG_Exp", "1000")
+
+    window.ui.left.field_buttons["sum"].click()
+
+    assert window.ui.field_text("Total_Exp") == ""
+    assert window.ui.toggles()["aggregate"] is False
+
+
+@pytest.mark.qt
+@pytest.mark.integration
+def test_a_checkbox_may_be_named_by_its_key_instead_of_its_column(lmig_app):
+    window = lmig_app(
+        buttons=linked_button(checkbox="aggregate"),
+        checkboxes=AGGREGATE_CHECKBOXES,
+    )
+    window.ui.set_field_text("LMIG_Exp", "1000")
+    window.ui.set_field_text("Local_Exp", "500")
+
+    window.ui.left.field_buttons["sum"].click()
+    assert window.ui.toggles()["aggregate"] is True
+
+
+@pytest.mark.qt
+@pytest.mark.integration
+def test_a_button_linked_to_a_missing_checkbox_still_computes(lmig_app):
+    window = lmig_app(
+        buttons=linked_button(checkbox="_not_configured"),
+        checkboxes=AGGREGATE_CHECKBOXES,
+    )
+    window.ui.set_field_text("LMIG_Exp", "1000")
+    window.ui.set_field_text("Local_Exp", "500")
+
+    window.ui.left.field_buttons["sum"].click()
+
+    assert window.ui.field_text("Total_Exp") == "1500"
+    assert window.ui.toggles() == {"flag": False, "aggregate": False}
+
+
+@pytest.mark.qt
+@pytest.mark.integration
+def test_a_text_button_writes_its_result_verbatim(lmig_app):
+    window = lmig_app(
+        buttons=[
+            {
+                "label": "Slug",
+                "key": "slug",
+                "target": "Match",
+                "expression": 'snake(Local_Exp & " " & LMIG_Exp)',
+                "decimals": 2,
+            }
+        ]
+    )
+    window.ui.set_field_text("LMIG_Exp", "2024")
+    window.ui.set_field_text("Local_Exp", "City of Ann Arbor")
+
+    window.ui.left.field_buttons["slug"].click()
+
+    assert window.ui.field_text("Match") == "city_of_ann_arbor_2024"
 
 
 @pytest.mark.qt

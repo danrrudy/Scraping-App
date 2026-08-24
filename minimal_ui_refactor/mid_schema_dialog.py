@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
 )
 
-from mid_schema import MIDSchema, normalize_sheet_name
+from mid_schema import MIDSchema, entry_label_choices, normalize_sheet_name
 
 
 USE_XY_PAIR = "<Compose from X/Y>"
@@ -117,7 +117,28 @@ class MIDSchemaDialog(QDialog):
         form.addRow("PDF page reference:", self.page_combo)
         form.addRow("Format code:", self.format_combo)
         form.addRow("Search keyword:", self.keyword_combo)
+
+        self.entry_label_combo = QComboBox()
+        for key, label in entry_label_choices():
+            self.entry_label_combo.addItem(label, key)
+        index = self.entry_label_combo.findData(self.schema.entry_label)
+        if index >= 0:
+            self.entry_label_combo.setCurrentIndex(index)
+        self.entry_label_combo.setToolTip(
+            "How each row is named in the viewer, the status bar, and the logs."
+        )
+        form.addRow("Entry label:", self.entry_label_combo)
         layout.addLayout(form)
+
+        self.entry_label_preview = QLabel("")
+        self.entry_label_preview.setWordWrap(True)
+        layout.addWidget(self.entry_label_preview)
+        self.entry_label_combo.currentIndexChanged.connect(
+            self._refresh_entry_label_preview
+        )
+        for combo in (self.x_combo, self.y_combo, self.document_combo):
+            combo.currentTextChanged.connect(self._refresh_entry_label_preview)
+        self._refresh_entry_label_preview()
 
         layout.addWidget(QLabel("Editable MID columns:"))
         self.interaction_list = QListWidget()
@@ -130,8 +151,11 @@ class MIDSchemaDialog(QDialog):
         )
         for column in listed:
             item = QListWidgetItem(column)
-            item.setSelected(column in selected)
+            # Selection only takes on an item the list already owns, so this
+            # has to follow addItem — otherwise reopening the dialog and
+            # pressing OK would clear every editable column.
             self.interaction_list.addItem(item)
+            item.setSelected(column in selected)
         layout.addWidget(self.interaction_list)
 
         self.new_columns_hint = QLabel("")
@@ -153,6 +177,39 @@ class MIDSchemaDialog(QDialog):
             return "" if text in PLACEHOLDERS else text
         return str(combo.currentData() or "")
 
+    def _refresh_entry_label_preview(self):
+        """Show the chosen format applied to the columns selected above."""
+        x_column = self._combo_value(self.x_combo)
+        y_column = self._combo_value(self.y_combo)
+        document_column = self._combo_value(self.document_combo)
+        # Sample each configured column with its own name, so the preview
+        # reads as the real thing rather than as placeholders.
+        sample = {
+            column: value
+            for column, value in (
+                (x_column, x_column or "X"),
+                (y_column, y_column or "Y"),
+                (document_column, document_column or "filename.pdf"),
+            )
+            if column
+        }
+        try:
+            schema = MIDSchema(
+                x_column=x_column,
+                y_column=y_column,
+                # Only the label matters here, so sidestep the configuration
+                # rules the OK button is responsible for enforcing.
+                interaction_columns=("preview",),
+                document_column=document_column,
+                entry_label=str(self.entry_label_combo.currentData() or ""),
+            )
+            preview = schema.observation_label(sample)
+        except ValueError:
+            preview = ""
+        self.entry_label_preview.setText(
+            f"Rows will be labelled: {preview}" if preview else ""
+        )
+
     def _refresh_new_column_hint(self):
         """Tell the user which named columns are not in the sheet yet."""
         known = set(self.columns)
@@ -172,22 +229,32 @@ class MIDSchemaDialog(QDialog):
         else:
             self.new_columns_hint.setText("")
 
-    def accept(self):
+    def build_schema(self) -> MIDSchema:
+        """The schema the current selections describe.
+
+        Raises ``ValueError`` when they do not describe a usable one, which is
+        what the OK button turns into a warning.
+        """
         interaction_columns = [
             item.text() for item in self.interaction_list.selectedItems()
         ]
+        schema = MIDSchema(
+            x_column=self._combo_value(self.x_combo),
+            y_column=self._combo_value(self.y_combo),
+            interaction_columns=tuple(interaction_columns),
+            document_column=self._combo_value(self.document_combo),
+            page_column=self._combo_value(self.page_combo),
+            format_column=self._combo_value(self.format_combo),
+            keyword_column=self._combo_value(self.keyword_combo),
+            entry_label=str(self.entry_label_combo.currentData() or ""),
+        )
+        schema.validate_configuration()
+        schema.validate_columns(self.columns)
+        return schema
+
+    def accept(self):
         try:
-            schema = MIDSchema(
-                x_column=self._combo_value(self.x_combo),
-                y_column=self._combo_value(self.y_combo),
-                interaction_columns=tuple(interaction_columns),
-                document_column=self._combo_value(self.document_combo),
-                page_column=self._combo_value(self.page_combo),
-                format_column=self._combo_value(self.format_combo),
-                keyword_column=self._combo_value(self.keyword_combo),
-            )
-            schema.validate_configuration()
-            schema.validate_columns(self.columns)
+            schema = self.build_schema()
         except ValueError as exc:
             QMessageBox.warning(self, "Invalid MID Configuration", str(exc))
             return

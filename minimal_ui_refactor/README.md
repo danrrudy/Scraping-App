@@ -105,6 +105,7 @@ Still in Settings, press **Configure MID Columns**.
 | PDF page reference | Optional. Which pages to read — `3`, `4-9`, `2, 5-7`. Leave unset to use the whole document. |
 | Format code | Optional. An integer choosing which scraper to use. |
 | Search keyword | Optional. Used by the audit only. |
+| Entry label | How each row is named on screen and in the logs. |
 | **Editable MID columns** | The fields that appear in the left sidebar. |
 
 X and Y are optional, and *may themselves be editable fields* — that is how you
@@ -115,6 +116,13 @@ created on load.
 > The one restriction: if you configure **no** filename column, the X/Y pair is
 > used to compose the filename instead, and then it cannot be editable —
 > editing it would repoint the row at a different file.
+
+**Entry label** chooses how a row is named wherever the application refers to
+one — the status bar, the log, the audit report. Pick from `X — Y` (the
+default), `X (Y)`, `X Y`, `XY`, `Y — X`, `Filename`, or `Filename (X — Y)`. The
+dialog previews your choice against the columns you selected. A blank
+identifier is dropped rather than leaving a stray separator, and a row with no
+identifiers at all falls back to its filename.
 
 ### 5. Add a scraper
 
@@ -203,14 +211,54 @@ they write into.
  "decimals": 2}
 ```
 
-Formulas may use the editable field names, numbers, `+ - * / // % **`, and
-`abs` / `min` / `max` / `round`. Nothing else — no attribute access, no other
-function calls. The dialog validates as you type and lists the names available.
-
 Field names become identifiers: a column called `Total Cost` is written
-`Total_Cost` in a formula. Values are read leniently, so `$1,234,567.00`,
-`12%`, and accounting negatives like `(500)` all work. If an input is empty the
-button says so in the status bar and leaves the target alone.
+`Total_Cost` in a formula. The dialog validates as you type and lists the names
+available.
+
+**Number formulas** use `+ - * / // % **` and `abs` / `min` / `max` / `round`.
+Values are read leniently, so `$1,234,567.00`, `12%`, and accounting negatives
+like `(500)` all work. `decimals` sets how the result is rounded when written.
+
+**Text formulas** join and reshape what was scraped. `&` joins pieces together,
+exactly as in a spreadsheet, and these functions are available:
+
+| Function | Does | Example result |
+| --- | --- | --- |
+| `concat(a, b, …)` | joins, same as `&` | `concat(Gov, " FY", FY)` → `Ann Arbor FY2024` |
+| `lower` / `upper` | case | `upper(Gov)` → `ANN ARBOR` |
+| `title` | Capitalises Every Word | `title(Gov)` → `Ann Arbor` |
+| `sentence` | Capitalises the first word only | `sentence(Gov)` → `Ann arbor` |
+| `camel` / `pascal` | `camelCase` / `PascalCase` | `camel(Gov)` → `annArbor` |
+| `snake` / `kebab` | `snake_case` / `kebab-case` | `snake(Gov)` → `ann_arbor` |
+| `trim` | drops surrounding spaces | `trim(Gov)` |
+| `replace(text, old, new)` | swaps every occurrence | `replace(Notes, ",", "-")` |
+
+```json
+{"label": "Slug", "target": "Key", "expression": "snake(Gov & \" \" & FY)"}
+```
+
+`+` always means arithmetic, even between two pieces of text, so a formula
+never changes meaning because a scraped field happened to hold digits — write
+`&` when you mean *join*. A text result is written exactly as the formula
+produces it; `decimals` applies only to numbers.
+
+**Setting a checkbox too.** A button may tick one of the sidebar checkboxes in
+the same press — *Also sets* names the checkbox and *Checkbox action* is
+`check`, `uncheck`, or `toggle`:
+
+```json
+{"label": "Sum", "target": "Total_Exp",
+ "expression": "LMIG_Exp + Match + Local_Exp", "decimals": 0,
+ "checkbox": "_aggregate", "checkbox_action": "check"}
+```
+
+`checkbox` may name the checkbox by its MID column (`_aggregate`) or by its key
+(`aggregate`). The checkbox behaves as if you clicked it, so its counter wakes
+up with it.
+
+Nothing else is permitted in a formula — no attribute access, no other function
+calls. If an input is empty the button says so in the status bar and leaves
+both the target field and the linked checkbox alone.
 
 ### Module settings — *Module Settings*
 
@@ -254,6 +302,30 @@ so this is instant. The sidebar shows *"Observation 2 of 3 in this document"*.
 spreadsheet to `.xlsx` or `.csv`. Edits live in memory until you do —
 the application never writes over your original.
 
+### Which rows have you done?
+
+Rows you have actually changed are tracked, so a long MID can be worked
+through in more than one sitting.
+
+*Navigating past a row does not count as editing it.* The sidebar is committed
+on every move, but nothing is written unless you changed something and that
+change differs from what the row already holds. Typing, ticking a checkbox,
+choosing a status, pressing a field button, and turning to a different page all
+count; simply looking at a row does not.
+
+The first time a change to a row is saved, that row is marked **edited** in an
+`_edited` column. It is written out with the rest of the MID, so reopening a
+saved sheet picks up where you left off.
+
+**File → Go to First Unedited Entry** (`Ctrl+U`) jumps to the topmost row that
+has never been edited, committing whatever you were working on first. The
+status bar reports how many unedited rows are left in the current view; when
+there are none it says so.
+
+**File → Entry → Mark as Edited** shows the current row's flag and lets you set
+it by hand — useful for a row you deliberately want to leave as it is, or one
+you want to come back to. It is a checkbox, so it un-marks as well.
+
 **Restart** (`Ctrl+R`) relaunches and returns to the row you were on. If there
 are unsaved changes it offers **Save**, **Discard**, or **Cancel**; backing out
 of the save dialog abandons the restart rather than losing the work.
@@ -293,6 +365,7 @@ a report to the log directory.
 | `Ctrl+F` | Flag for review (a checkbox's own shortcut) |
 | `Ctrl+N` | Add an observation from this document |
 | `Ctrl+S` | Save the MID |
+| `Ctrl+U` | Go to the first unedited entry |
 | `Ctrl+R` | Restart |
 | `F1` – `F4` | Add a row at that hierarchy level (legacy schemas only) |
 

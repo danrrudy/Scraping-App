@@ -379,23 +379,56 @@ Each names a target field and an expression over the editable fields:
 The buttons render **beside the field they write into**, so `10%` and `30%`
 sit next to Match, tooltipped with the formula.
 
+A button may also carry `checkbox` (a checkbox key or MID column) and
+`checkbox_action` (`check` / `uncheck` / `toggle`), which it applies after the
+formula succeeds:
+
+```json
+{"label": "Sum", "target": "Total_Exp", "expression": "LMIG_Exp + Match",
+ "checkbox": "_aggregate", "checkbox_action": "check"}
+```
+
+`MainWindowUI.set_toggle` grew a `notify` flag for this. Presenting a row still
+blocks signals, but a button-driven change passes `notify=True` so the checkbox
+behaves exactly as a click does — the companion counter follows it and
+`toggleChanged` reaches the controller. A button naming a checkbox that is not
+configured logs a warning and simply computes its field.
+
 ### The formula language
 
 `field_formula.py` parses expressions with `ast` and walks them against an
-allow-list — never `eval`. Permitted: the editable fields, numbers,
-`+ - * / // % **`, unary `+ -`, and `abs / min / max / round`. Everything else
-— attribute access, subscripts, comparisons, comprehensions, any other call —
-is rejected with a message naming what was wrong. `__import__("os").system(…)`
-fails at the allow-list, not at runtime.
+allow-list — never `eval`. Everything outside it — attribute access,
+subscripts, comparisons, comprehensions, any other call — is rejected with a
+message naming what was wrong. `__import__("os").system(…)` fails at the
+allow-list, not at runtime.
 
-Field names become identifiers: `"LMIG Exp"` and `"LMIG_Exp"` are both written
-`LMIG_Exp`. Values are read with `to_number`, which handles what published
-documents actually contain — `$1,234,567.00`, `12%`, and accounting negatives
-like `(500)`.
+Fields arrive as text (`FieldText`, a `str` tagged with the name the formula
+knows it by) and convert on demand, so one expression language covers both
+jobs:
+
+* **numbers** — `+ - * / // % **`, unary `+ -`, `abs / min / max / round`.
+  Conversion goes through `to_number`, which handles what published documents
+  actually contain: `$1,234,567.00`, `12%`, accounting negatives like `(500)`.
+* **text** — `&` joins (`ast.BitAnd`), plus `TEXT_FUNCTIONS`: `concat`,
+  `lower`, `upper`, `title`, `sentence`, `camel`, `pascal`, `snake`, `kebab`,
+  `trim`, `replace`.
+
+`evaluate` returns a float or a str; `format_result` rounds the former to the
+button's `decimals` and passes the latter through untouched.
+
+`+` stays arithmetic even between two strings. Overloading it would make a
+formula's meaning depend on whether a scraped field happened to parse as a
+number, so joining is always written `&` or `concat()`, and the error for
+`"a" + "b"` says so. The case functions share one word-splitter, which breaks
+on separators *and* on camel humps, so `LMIGExpTotal` and `lmig exp total`
+reduce alike.
+
+`FieldText` exists so a failed conversion can name its source: the tag is what
+turns a bare "not a number" into *"'LMIG_Exp' is empty or is not a number"*.
 
 Failures are reported, never destructive: pressing `10%` with an empty
-`LMIG_Exp` leaves Match alone and puts *"'LMIG_Exp' is empty or is not a
-number"* in the status bar. The dialog validates as you type, so a broken
+`LMIG_Exp` leaves Match alone — and leaves any linked checkbox alone — and puts
+the message in the status bar. The dialog validates as you type, so a broken
 formula is caught where it is written.
 
 ## Tab and Shift+Tab
@@ -527,6 +560,89 @@ developer's settings file — it was overwritten with a pytest temp path during
 this work and has been restored. The fixture now redirects saves to `tmp_path`,
 deep-copies `default_settings` (a shallow copy shared the nested dicts between
 tests), and stubs `QMessageBox.question` so no test can block on a modal.
+
+# Which rows have been edited
+
+Two flags, deliberately separate, because they answer different questions.
+
+## `MIDManager.entry_is_dirty()` — in memory only
+
+*Has the user changed anything about the row that is open?* Set by
+`set_value` whenever a write is a real change, and cleared by the
+`current_index` setter, so every move to another row starts clean. It is never
+written to the MID.
+
+It exists because `_commit_sidebar_fields` runs on **every** navigation. Before
+this, walking past a row rewrote all of its fields — harmless while the values
+matched, but it meant a row nobody touched could not be distinguished from one
+that had been worked on, and app-supplied defaults (a `Page` number, the
+default classification scheme) would be written into rows the user only glanced
+at. Commit now stages its values, and writes nothing unless the row is dirty
+**and** `pending_changes` finds a real difference.
+
+What counts as touching a row: typing in a field, a checkbox, a counter, a
+status radio, the scheme combo, a field button, content transferred from the
+right-hand panel, and turning to a different page — the page is written into
+the row, so choosing a different one is a change to it. Presenting a row is
+not: `LeftSidebar` already blocked its widgets' signals in every `set_*`
+method, and `load_mid_fields_from_row` additionally suppresses the reports
+while it fills the sidebar in.
+
+Two paths feed it. `LeftSidebar.userEdited` fires when a person operates a
+widget, and the `MainWindowUI` setters that write row values report themselves,
+because they block the signals they would otherwise raise.
+
+Reviewer mode is unaffected: marking a row `SEEN` is the reviewer workflow's
+own record of having visited it, not a user edit, so it still happens on every
+visit and does not mark the row edited.
+
+## `_edited` — a real MID column
+
+*Has a change to this row ever been saved?* A workflow column defaulting to
+`False`, parsed back from the sheet like the other underscore booleans, and
+written out with the MID. Set when a commit actually writes, and reset on
+rows created by `clone_for_document`, `clone_for_child`, and
+`duplicate_prior_year` — a new row has not been edited by anyone.
+
+- **File → Go to First Unedited Entry** (`Ctrl+U`) commits the current row,
+  then jumps to `first_unedited_index()`. The status bar reports
+  `unedited_count()` for the current view; a fully edited view says so instead
+  of moving.
+- **File → Entry → Mark as Edited** is a checkable action reflecting
+  `is_entry_edited()` for whichever row is open, updated by
+  `update_info_labels`. Setting it by hand goes through `set_entry_edited`,
+  which writes the flag without going through `set_value` — the flag records
+  that a row was edited, it is not itself one of the row's edits.
+
+`File → Entry` exists to be filled: it is held on `MainWindowUI.entry_menu` so
+further per-entry controls have somewhere to go.
+
+# Entry labels are configurable
+
+`MIDSchema.observation_label` composed `f"{x} — {y}"` and nothing else. It now
+reads `entry_label`, a key into `ENTRY_LABEL_FORMATS`, set from **Configure MID
+Columns → Entry label** and stored as `midSchema.entryLabel`:
+
+`X — Y` (the default, unchanged), `X (Y)`, `X Y`, `XY`, `Y — X`, `Filename`,
+`Filename (X — Y)`.
+
+Every caller already went through `observation_label`, so the viewer, the
+status bar, the logs, and the audit report all follow the setting. A blank
+identifier is dropped rather than leaving a stray separator; a row with no
+identifiers still falls back to its filename. An unknown key in a hand-edited
+settings file falls back to the default rather than stopping the application
+from starting.
+
+## Also fixed
+
+**Configure MID Columns forgot its editable columns.** The dialog built each
+`QListWidgetItem` and called `setSelected` on it *before* `addItem`, and
+selection does not take on an item the list does not own yet. Reopening the
+dialog therefore showed nothing selected, and pressing OK failed validation
+with "Select at least one MID column to interact with". Selection now follows
+`addItem`. The schema-building half of `accept` was also split out as
+`build_schema`, so the dialog can be tested without a dialog that was never
+shown having to close itself.
 
 ## Suggested next step
 
