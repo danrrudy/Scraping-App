@@ -99,6 +99,16 @@ Not optional. PyInstaller bundles whatever it finds installed, so a global
 interpreter with unrelated packages produces a larger and less predictable
 build.
 
+> **A fresh environment resolves to newer libraries than your working one.**
+> `requirements.txt` gives lower bounds, so a build machine installing today
+> gets whatever is current — the first CI run picked up pandas 3.0.5 while
+> the development machine was on 2.3.1, and pandas 3's new default `str`
+> dtype broke every page turn and field commit. The application now works on
+> both, and CI is the thing that will tell you when that stops being true.
+>
+> The practical consequence: **a green local test run does not mean a green
+> build.** Check the CI result before handing a build to anyone.
+
 > **Known snag on this machine:** the global Python 3.13 has the obsolete
 > `pathlib` PyPI backport installed, and PyInstaller refuses to run while it is
 > present. A virtual environment sidesteps it. To fix it globally instead:

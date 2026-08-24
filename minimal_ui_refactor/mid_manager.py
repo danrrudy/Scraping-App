@@ -826,8 +826,8 @@ class MIDManager:
         ):
             self._modified = True
             self._entry_dirty = True
-        self.master_df.at[mpos, col] = value
-        self.df.at[view_pos, col] = value
+        self._write_cell(self.master_df, mpos, col, value)
+        self._write_cell(self.df, view_pos, col, value)
 
     def pending_changes(self, view_pos: int, values) -> dict:
         """Which of ``values`` would actually change row ``view_pos``.
@@ -845,6 +845,26 @@ class MIDManager:
             if col not in self.master_df.columns
             or self._is_edit(self.master_df.at[mpos, col], value)
         }
+
+    @staticmethod
+    def _write_cell(frame, row_label, col, value):
+        """Write one cell, widening the column if its dtype cannot hold it.
+
+        pandas 3 gives a column that was read or created as text the ``str``
+        dtype, and that dtype refuses a non-string scalar outright. pandas 2
+        silently widened such a column to ``object`` instead.
+
+        A MID column legitimately holds both: ``Page`` is declared an ``int``
+        in :data:`COLUMN_TYPES`, but the column is created empty and so is
+        typed as text until the first page number lands in it. Rather than
+        pin the application to pandas 2, widen the column ourselves and carry
+        on, which is what pandas 2 did on our behalf.
+        """
+        try:
+            frame.at[row_label, col] = value
+        except (TypeError, ValueError):
+            frame[col] = frame[col].astype(object)
+            frame.at[row_label, col] = value
 
     @staticmethod
     def _is_edit(current, value) -> bool:
@@ -918,9 +938,9 @@ class MIDManager:
         value = bool(value)
         if bool(self.master_df.at[mpos, EDITED_COLUMN]) != value:
             self._modified = True
-        self.master_df.at[mpos, EDITED_COLUMN] = value
+        self._write_cell(self.master_df, mpos, EDITED_COLUMN, value)
         if self.df is not None and 0 <= view_pos < len(self.df):
-            self.df.at[view_pos, EDITED_COLUMN] = value
+            self._write_cell(self.df, view_pos, EDITED_COLUMN, value)
         return value
 
     def toggle_entry_edited(self, view_pos: int | None = None) -> bool:

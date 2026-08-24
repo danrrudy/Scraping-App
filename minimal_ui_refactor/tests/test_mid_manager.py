@@ -230,3 +230,55 @@ def test_duplicate_prior_year_requires_a_prior_year(manager_factory, mid_row_fac
     with pytest.raises(ValueError, match="No prior-year rows"):
         manager.duplicate_prior_year()
 
+
+# ----------------------------------------------------------------------
+# Column dtypes
+# ----------------------------------------------------------------------
+def test_a_number_can_be_written_into_a_column_read_as_text(
+    manager_factory, mid_row_factory
+):
+    """The page number is an int landing in a column that was created empty.
+
+    pandas 3 types such a column as ``str`` and refuses a non-string scalar,
+    where pandas 2 silently widened it. Every page turn and every field commit
+    goes through this path, so the application has to widen it itself.
+    """
+    manager = manager_factory([mid_row_factory(Page="")])
+
+    manager.set_value(0, "Page", 4)
+
+    assert str(manager.df.at[0, "Page"]) == "4"
+    assert str(manager.master_df.at[0, "Page"]) == "4"
+
+
+def test_writing_a_number_leaves_the_other_rows_alone(
+    manager_factory, mid_row_factory
+):
+    """Widening a column must not disturb what the rest of it already holds."""
+    manager = manager_factory(
+        [mid_row_factory(Page=""), mid_row_factory(Page="7")]
+    )
+
+    manager.set_value(0, "Page", 4)
+
+    assert str(manager.df.at[1, "Page"]) == "7"
+
+
+def test_a_boolean_can_be_written_into_a_column_read_as_text(
+    manager_factory, mid_row_factory
+):
+    manager = manager_factory([mid_row_factory(_flag="")])
+
+    manager.set_value(0, "_flag", True)
+
+    assert bool(manager.df.at[0, "_flag"]) is True
+
+
+def test_the_edited_flag_can_be_set_on_a_column_read_as_text(
+    manager_factory, mid_row_factory
+):
+    """The persistent edited flag writes a bool and bypasses set_value."""
+    manager = manager_factory([mid_row_factory()])
+
+    assert manager.set_entry_edited(True, 0) is True
+    assert bool(manager.master_df.at[0, "_edited"]) is True
