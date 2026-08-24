@@ -7,7 +7,7 @@ from logger import setup_logger
 import shutil
 
 # Base Extractor Template is the abstract interface for implementing individual Extractor tools
-BASE_Extractor_TEMPLATE = os.path.join(os.path.dirname(__file__), "base_Extractor.py")
+BASE_EXTRACTOR_TEMPLATE = os.path.join(os.path.dirname(__file__), "base_extractor.py")
 
 # ExtractionToolDialog is the popup window where the user selects, defines, and integrates their extraction tools
 class ExtractionToolDialog(QDialog):

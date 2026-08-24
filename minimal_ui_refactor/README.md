@@ -25,13 +25,33 @@ all configuration.
 
 ---
 
-## Requirements
+## Installing
+
+Two ways in. Most people want the first.
+
+### A packaged build — no Python needed
+
+Download the archive for your platform, unzip it **somewhere you can write
+to** (your Desktop or Documents, not `Program Files`), and run it.
+
+- **Windows** — unzip and run `DocumentReviewTool.exe`.
+- **macOS** — unzip, then **right-click** `DocumentReviewTool.app` and
+  choose **Open**, then **Open** again. Only the first launch needs this; the
+  app is signed but not notarised, so a plain double-click is refused.
+
+Everything the application writes — your settings, logs, scrapers, and
+data — lives **beside the program**, so you can move the whole folder to
+another machine and it keeps working. See [PACKAGING.md](PACKAGING.md) for the
+details, including what happens if you install somewhere read-only.
+
+One limitation: the table-detection scrapers need PyTorch and Tesseract, which
+are not in the build. Everything else works. Run from source if you need them.
+
+### From source
 
 - **Python 3.10 or newer** (developed on 3.13). The code uses `X | Y` type
   syntax, which 3.9 cannot parse.
 - A desktop environment. This is a Qt application, not a command-line tool.
-
-## Installation
 
 ```bash
 python -m venv .venv
@@ -51,8 +71,10 @@ when you add the plugin.
 ## Running
 
 ```bash
-python scraping_helper.py
+python main.py
 ```
+
+`python scraping_helper.py` still works and does the same thing.
 
 ---
 
@@ -126,12 +148,16 @@ identifiers at all falls back to its filename.
 
 ### 5. Add a scraper
 
-The application does not read PDFs by itself. A scraper is a small Python file
-you supply; see [Writing a scraper](#writing-a-scraper) below. Press **Set Up
-Scraping Tools**, add your file, and set it as the default.
+The application does not read PDFs by itself; a scraper is a small Python file
+that does it. A first run installs `text_scraper.py` into `scrapers/` and makes
+it the default, so plain text extraction works out of the box.
 
-Without one you will see *"No scraper found for format type -1"* in the log and
-an empty content panel — the pages still display, but nothing is extracted.
+To use your own instead — see [Writing a scraper](#writing-a-scraper)
+below — press **Set Up Scraping Tools**, add your file, and set it as the
+default.
+
+If you ever see *"No scraper found for format type -1"* in the log and an empty
+content panel, no scraper is registered: — the pages still display, but nothing is extracted.
 
 ### 6. Restart
 
@@ -461,9 +487,11 @@ pip install -r requirements-dev.txt
 python -m pytest
 ```
 
-At the time of writing: 189 pass, 4 fail. The four are long-standing and
-unrelated to the current UI work — two concern the audit report's shape and two
+At the time of writing: 280 pass, 4 fail. The four are long-standing and
+unrelated to the current work — two concern the audit report's shape and two
 are `MIDManager` expectations marked strict-xfail that now pass.
+
+To build a distributable executable, see [PACKAGING.md](PACKAGING.md).
 
 The architecture, the module boundaries, and the reasoning behind the recent
 changes are documented in [REFACTOR_NOTES.md](REFACTOR_NOTES.md). In short:
@@ -477,6 +505,9 @@ changes are documented in [REFACTOR_NOTES.md](REFACTOR_NOTES.md). In short:
 | `document_session.py` | One open PDF and its scrape, shared by every row about it |
 | `field_formula.py` | The formula language used by field buttons |
 | `module_settings.py` | Settings a module declares for itself |
+| `main.py` | The launcher: high-DPI setup and first-run housekeeping |
+| `paths.py` | Where files live, in a checkout and in a packaged build |
+| `starter_plugins.py` | The scrapers a fresh installation starts with |
 
 To add a content panel, subclass `ContentPanel`, decorate it with
 `@register_panel`, and it appears in the View menu. To give it settings,

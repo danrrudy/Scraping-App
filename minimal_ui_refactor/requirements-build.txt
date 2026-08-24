@@ -1,0 +1,3 @@
+# Everything needed to turn a source checkout into a distributable build.
+# Install alongside requirements.txt; see PACKAGING.md.
+pyinstaller>=6.6

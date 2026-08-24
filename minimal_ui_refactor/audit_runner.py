@@ -10,6 +10,7 @@ from typing import Any
 
 import fitz
 
+import paths
 from logger import setup_logger
 from mid_schema import clean_value, safe_filename_stem
 from scraper_loader import load_scraper_class
@@ -18,14 +19,21 @@ from scraper_loader import load_scraper_class
 TABLE_FORMAT_TYPES = {str(value) for value in range(1, 19)}
 
 
+def _scraper_path(filename):
+    """A scraper the audit expects to find in the installation's plugin folder.
+
+    Not ``__file__``: a frozen build's own directory is read-only and holds no
+    plugins, so the audit looks where the user's scrapers actually live.
+    """
+    return Path(paths.app_dir()) / "scrapers" / filename
+
+
 def _load_text_scraper():
-    scraper_path = Path(__file__).with_name("scrapers") / "text_scraper.py"
-    return load_scraper_class(str(scraper_path))
+    return load_scraper_class(str(_scraper_path("text_scraper.py")))
 
 
 def _load_table_scraper():
-    scraper_path = Path(__file__).with_name("scrapers") / "table_scraper.py"
-    return load_scraper_class(str(scraper_path))
+    return load_scraper_class(str(_scraper_path("table_scraper.py")))
 
 
 def _scrape_page_texts(document, page_indices, logger, label):
@@ -60,7 +68,15 @@ def _test_table_detected(
     if str(format_type) not in TABLE_FORMAT_TYPES:
         return True
 
-    ScraperClass = _load_table_scraper()
+    try:
+        ScraperClass = _load_table_scraper()
+    except (ImportError, OSError) as exc:
+        # The table scraper is an optional plugin: it needs machine-learning
+        # libraries that are not part of a packaged build. Its absence makes
+        # this one check unavailable, not the whole audit invalid.
+        logger.warning(f"Table detection skipped; no table scraper available: {exc}")
+        return True
+
     observation_stem = safe_filename_stem(mid_manager.observation_stem(row))
     try:
         for page_index in page_indices:

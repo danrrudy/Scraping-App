@@ -31,6 +31,7 @@ from extractor_loader import select_extractor_class
 from logger import setup_logger
 from mid_manager import MIDManager
 from mid_schema import LEGACY_HIERARCHY_COLUMNS, MIDSchema
+import paths
 from scraper_loader import select_scraper_class
 import field_formula
 import module_settings
@@ -288,14 +289,24 @@ class TextScrapingReviewApp(QMainWindow):
         the same script. Any resume flag already present is replaced so the
         arguments do not grow with each restart.
         """
-        if getattr(sys, "frozen", False):
+        bundle = paths.macos_bundle()
+        if bundle is not None:
+            # Re-running the binary inside Contents/MacOS starts a process that
+            # macOS does not recognise as the application. ``open -n`` asks
+            # Launch Services for a second instance of the bundle instead.
+            program = "open"
+            prefix = ["-n", "-a", str(bundle), "--args"]
+            arguments = prefix + list(sys.argv[1:])
+        elif getattr(sys, "frozen", False):
             program, arguments = sys.executable, list(sys.argv[1:])
+            prefix = []
         else:
             program, arguments = sys.executable, list(sys.argv)
+            prefix = []
 
-        cleaned = []
+        cleaned = list(prefix)
         skip_next = False
-        for argument in arguments:
+        for argument in arguments[len(prefix):]:
             if skip_next:
                 skip_next = False
                 continue
@@ -2005,7 +2016,8 @@ class TextScrapingReviewApp(QMainWindow):
 
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = TextScrapingReviewApp()
-    window.show()
-    sys.exit(app.exec_())
+    # The launcher owns start-up: high-DPI attributes have to be set before any
+    # QApplication is built, so running this file directly defers to it.
+    from main import main
+
+    sys.exit(main())

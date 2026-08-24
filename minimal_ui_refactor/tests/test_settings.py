@@ -1,3 +1,4 @@
+import copy
 import json
 
 from app_settings import default_settings, load_settings, save_settings
@@ -59,3 +60,18 @@ def test_settings_round_trip_preserves_serializable_values(tmp_path):
 
     assert load_settings(path) == expected
 
+
+
+def test_settings_saved_with_a_byte_order_mark_still_load(tmp_path):
+    """Several Windows editors add a BOM. Losing the file to it is not an option.
+
+    Reading such a file as plain utf-8 raises, which the loader answers with
+    defaults — and the next save would then write those defaults over the
+    user's real configuration.
+    """
+    path = tmp_path / "user_settings.json"
+    expected = copy.deepcopy(default_settings)
+    expected["MIDSheetName"] = "Sheet configured by hand"
+    path.write_text(json.dumps(expected), encoding="utf-8-sig")
+
+    assert load_settings(path)["MIDSheetName"] == "Sheet configured by hand"

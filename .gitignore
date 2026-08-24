@@ -16,3 +16,13 @@ __pycache__/
 
 # Crash dumps left behind by the shell
 *.stackdump
+
+# Build output
+build/
+dist/
+*.spec.bak
+
+# Plugin folders seeded into a source checkout at first run; the shipped
+# copies live in minimal_ui_refactor/bundled/
+minimal_ui_refactor/scrapers/
+minimal_ui_refactor/extractors/

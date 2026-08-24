@@ -3,6 +3,7 @@ import json
 import os
 from copy import deepcopy
 
+import paths
 from mid_schema import DEFAULT_MID_SCHEMA
 
 # The sidebar checkboxes are user-defined. Each entry needs only a MID column;
@@ -231,21 +232,17 @@ default_settings = {
     "MIDSheetName": "",  # Sheet name within the MID to use
     "loggingLevel": "INFO",  # Minimum severity of messages to log
     # NOTE: logs will be saved to ./logs if this variable can't be found by the logger!
-    "logFileDirectory": os.path.join(
-        os.path.dirname(__file__), "logs"
-    ),  # Default: ./logs
+    "logFileDirectory": paths.in_app_dir("logs"),  # Default: ./logs
     "logRetention": 10,  # Maximum number of log files to keep
     "consoleOutput": "Both",  # Writes log to console as well
-    "scrapingToolDirectory": os.path.join(
-        os.path.dirname(__file__), "scrapers"
-    ),  # Default: ./scrapers
+    "scrapingToolDirectory": paths.in_app_dir("scrapers"),  # Default: ./scrapers
     "scrapingTools": {},
-    "dataDirectory": os.path.join(os.path.dirname(__file__), "data"),  # Default: ./data
+    "dataDirectory": paths.in_app_dir("data"),  # Default: ./data
     "defaultScraper": "",  # Name of the scraper to use as a fallback
     "userMode": "User",
     "defaultExtractor": "",
     "extractionTools": {},
-    "extractionToolDirectory": os.path.join(os.path.dirname(__file__), "extractors"),
+    "extractionToolDirectory": paths.in_app_dir("extractors"),
     "evaluationClasses": {},
     "defaultClass": "",
     "UIScale": "1.0",
@@ -260,8 +257,9 @@ default_settings = {
     "moduleSettings": {},
 }
 
-# Default location for settings file
-SETTINGS_PATH = os.path.join(os.path.dirname(__file__), "user_settings.json")
+# Default location for settings file. Beside the program, so that copying the
+# installation somewhere else takes the configuration with it; see paths.py.
+SETTINGS_PATH = paths.in_app_dir("user_settings.json")
 
 
 def load_settings(path=SETTINGS_PATH):
@@ -271,7 +269,11 @@ def load_settings(path=SETTINGS_PATH):
         return deepcopy(default_settings)
 
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        # utf-8-sig, not utf-8: several Windows editors write a byte-order mark
+        # when saving JSON, and reading that as plain utf-8 fails on the very
+        # first character. The settings would then silently revert to defaults
+        # and the next save would overwrite the user's real configuration.
+        with open(path, "r", encoding="utf-8-sig") as f:
             user_settings = json.load(f)
 
             filtered_settings = {

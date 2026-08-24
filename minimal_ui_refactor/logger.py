@@ -2,6 +2,7 @@ import logging
 import os
 import glob
 from datetime import datetime
+import paths
 from app_settings import load_settings
 
 
@@ -33,7 +34,7 @@ def enforce_log_retention(log_dir, max_logs):
 def setup_logger():
 	settings = load_settings()
 	level_name = settings.get("loggingLevel", "INFO")
-	log_dir = settings.get("logFileDirectory", os.path.join(os.path.dirname(__file__), "logs")) # will default to ./logs if the setting can't be loaded
+	log_dir = settings.get("logFileDirectory") or paths.in_app_dir("logs") # will default to ./logs beside the program if the setting can't be loaded
 	max_logs = int(settings.get("logRetention", 10))
 	console_output = settings.get("consoleOutput", False)
 
