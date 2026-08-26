@@ -69,12 +69,23 @@ jobs:
         include:
           - os: windows-latest
             label: windows-x64
-          # macOS 14 runners are Apple Silicon. PyQt5 publishes separate arm64
-          # and x86_64 wheels rather than a universal one, so each runner
-          # yields a single-architecture build.
-          - os: macos-14
+          # PyQt5 publishes separate arm64 and x86_64 wheels rather than a
+          # universal one, so each runner yields a single-architecture build.
+          #
+          # Pin the image rather than using macos-latest: which OS that points
+          # at changes underneath you, and this build has to keep matching the
+          # LSMinimumSystemVersion in DocumentReviewTool.spec.
+          #
+          # macos-15 is Apple Silicon. Do not go back to macos-14 (deprecation
+          # began 2026-07-06, unsupported from 2026-11-02) or macos-13 (retired
+          # 2025-12-04) — a job asking for a retired image is not rejected, it
+          # queues for a runner that will never arrive.
+          - os: macos-15
             label: macos-arm64
-          - os: macos-13
+          # The last x86_64 macOS image Actions will ever offer; it goes away
+          # in August 2027, and with it the ability to build for Intel Macs
+          # here at all.
+          - os: macos-15-intel
             label: macos-x86_64
 
     runs-on: ${{ matrix.os }}

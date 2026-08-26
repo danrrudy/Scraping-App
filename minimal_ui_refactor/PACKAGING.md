@@ -167,8 +167,8 @@ targets in parallel:
 | Runner | Produces |
 | --- | --- |
 | `windows-latest` | `DocumentReviewTool-windows-x64.zip` |
-| `macos-14` | `DocumentReviewTool-macos-arm64.zip` (Apple Silicon) |
-| `macos-13` | `DocumentReviewTool-macos-x86_64.zip` (Intel) |
+| `macos-15` | `DocumentReviewTool-macos-arm64.zip` (Apple Silicon) |
+| `macos-15-intel` | `DocumentReviewTool-macos-x86_64.zip` (Intel) |
 
 Every run uploads them as workflow artifacts, kept for 90 days. Pushing a tag
 matching `v*` additionally attaches them to a GitHub release, which is the
@@ -177,6 +177,30 @@ need no GitHub account, artifact downloads do.
 
 The remote is `github.com/danrrudy/Scraping-App`, so pushing any branch starts
 a build.
+
+### The macOS runner images expire
+
+GitHub retires macOS runner images on a rolling schedule, and **a job that asks
+for a retired image is not rejected — it queues for a runner that will never
+arrive**, showing "waiting for a runner" until someone cancels it. Because the
+matrix sets `fail-fast: false`, the other builds finish and only the macOS one
+hangs, which makes it easy to miss.
+
+| Image | Status |
+| --- | --- |
+| `macos-13` | Retired 2025-12-04. Never use. |
+| `macos-14` | Deprecation began 2026-07-06; unsupported from 2026-11-02. |
+| `macos-15` | Current Apple Silicon image. |
+| `macos-15-intel` | The last x86_64 image Actions will offer; gone August 2027. |
+
+After August 2027 there is no Intel macOS runner at all, and the `macos-x86_64`
+build has to be dropped or moved to hardware you own.
+
+The images are pinned rather than using `macos-latest`, because which OS that
+points at changes underneath you, and the build has to keep matching the
+`LSMinimumSystemVersion` in the spec. That pinning is what makes it your job to
+check these dates: when a build starts hanging, this table is the first thing
+to look at.
 
 The test job deliberately deselects the four long-standing failures listed at
 the bottom of this file. It stays a real gate — any *other* failure stops the
