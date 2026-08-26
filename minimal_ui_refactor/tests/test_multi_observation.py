@@ -48,15 +48,43 @@ def test_rows_on_one_document_share_a_session(one_document_app):
 
 @pytest.mark.qt
 @pytest.mark.integration
-def test_the_previous_document_is_closed_when_the_session_changes(one_document_app):
+def test_the_previous_document_is_kept_for_reuse_not_closed(one_document_app):
+    """Leaving a document caches it rather than closing it.
+
+    This replaces an earlier guarantee that the previous document was closed
+    outright. It is deliberately weaker: open PDFs are now bounded by the
+    cache rather than released the moment they stop being current, which is
+    what makes stepping back to a document free. That the bound is enforced —
+    that eviction really does close — is covered in test_document_cache.py.
+    """
     window = one_document_app()
     first_session = window.document_session
 
     window.mid_manager.current_index = 2
     window.load_mid_entry_document()
 
-    assert first_session.doc is None
+    assert window.document_session is not first_session
     assert window.document_session.doc is not None
+    assert first_session.doc is not None, "the previous document was closed"
+    assert len(window.session_cache) == 1
+
+
+@pytest.mark.qt
+@pytest.mark.integration
+def test_going_back_to_a_document_reuses_it_without_rescraping(one_document_app):
+    window = one_document_app()
+    first_session = window.document_session
+    first_session.set_text(0, "an edit the user made")
+
+    window.mid_manager.current_index = 2
+    window.load_mid_entry_document()
+    assert window.document_session is not first_session
+
+    window.mid_manager.current_index = 0
+    window.load_mid_entry_document()
+
+    assert window.document_session is first_session, "the document was rebuilt"
+    assert window.document_session.text_at(0) == "an edit the user made"
 
 
 @pytest.mark.qt

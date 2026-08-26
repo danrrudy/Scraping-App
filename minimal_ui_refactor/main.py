@@ -19,7 +19,7 @@ from PyQt5.QtWidgets import QApplication
 
 import paths
 import starter_plugins
-from app_settings import load_settings, save_settings
+from app_settings import load_settings, migrate_settings, save_settings
 from logger import setup_logger
 from version import APP_NAME, APP_SLUG, __version__
 
@@ -46,8 +46,15 @@ def prepare_installation():
     logger.info(paths.location_note())
 
     settings = load_settings()
+    # Before anything reads module settings: resolving a module drops keys it
+    # no longer declares, so a renamed setting has to be carried across while
+    # the old key is still in the file.
+    migrated = migrate_settings(settings)
+    if migrated:
+        logger.info("Brought stored settings up to date")
+
     written = starter_plugins.seed(settings, logger)
-    if starter_plugins.register(settings, written, logger):
+    if starter_plugins.register(settings, written, logger) or migrated:
         # Saved here rather than left in memory: the window loads the settings
         # again for itself, and would otherwise not see the registration.
         save_settings(settings)

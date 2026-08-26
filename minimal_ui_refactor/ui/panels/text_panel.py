@@ -4,10 +4,30 @@ from __future__ import annotations
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QTextCharFormat, QTextCursor
-from PyQt5.QtWidgets import QAction, QMenu, QTextEdit, QVBoxLayout
+from PyQt5.QtWidgets import (
+    QAction,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMenu,
+    QPushButton,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
+from document_text import (
+    SEARCH_ANYWHERE,
+    SEARCH_IN_RANGE,
+    SEARCH_MARK_OUTSIDE,
+    SEARCH_SCOPES,
+    collapse_whitespace as _collapse_whitespace,
+)
 from module_settings import (
     BoolSetting,
+    ChoiceSetting,
     IntSetting,
     ModuleSettings,
     register_module_settings,
@@ -17,40 +37,6 @@ from ..widgets import configure_text_box
 from . import register_panel
 from .base import ContentPanel
 
-# Qt reports paragraph and line separators inside selections; treat them, and a
-# non-breaking space, as ordinary whitespace when matching.
-_WHITESPACE_EXTRAS = {"\u2029", "\u2028", "\u00a0"}
-
-
-def _collapse_whitespace(text: str) -> tuple[str, list[int]]:
-    """Collapse runs of whitespace and map each kept character to its origin.
-
-    Returns ``(collapsed, index_map)`` where ``index_map[i]`` is the index in
-    ``text`` that produced ``collapsed[i]``.
-    """
-    collapsed: list[str] = []
-    index_map: list[int] = []
-    previous_was_space = False
-
-    for index, character in enumerate(text):
-        if character.isspace() or character in _WHITESPACE_EXTRAS:
-            if not previous_was_space:
-                collapsed.append(" ")
-                index_map.append(index)
-                previous_was_space = True
-            continue
-        collapsed.append(character)
-        index_map.append(index)
-        previous_was_space = False
-
-    while collapsed and collapsed[0] == " ":
-        collapsed.pop(0)
-        index_map.pop(0)
-    while collapsed and collapsed[-1] == " ":
-        collapsed.pop()
-        index_map.pop()
-
-    return "".join(collapsed), index_map
 
 
 @register_panel
@@ -61,6 +47,7 @@ class ScrapedTextPanel(ContentPanel):
     panel_id = "scraped_text"
     display_name = "Scraped Text"
     supports_number_key_transfer = True
+    supports_search = True
 
     MODULE_SETTINGS = ModuleSettings(
         module_id="scraped_text",
@@ -92,6 +79,22 @@ class ScrapedTextPanel(ContentPanel):
                 "Highlight field text where it appears in the page",
                 default=True,
             ),
+            BoolSetting(
+                "showSearchBar",
+                "Show the document search box",
+                default=True,
+                help="Searches every page of the open file, not just the one "
+                "on screen.",
+            ),
+            ChoiceSetting(
+                "searchScope",
+                "How far a search reaches",
+                choices=SEARCH_SCOPES,
+                default=SEARCH_IN_RANGE,
+                help="The page you are on is written into the MID, so jumping "
+                "outside the pages a row declares can record a page that row "
+                "is not about.",
+            ),
         ),
     )
 
@@ -109,7 +112,111 @@ class ScrapedTextPanel(ContentPanel):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self._build_search_bar())
         layout.addWidget(self.editor)
+        layout.addWidget(self._build_results())
+
+    # ------------------------------------------------------------------
+    # Searching
+    # ------------------------------------------------------------------
+    def _build_search_bar(self):
+        """The search box, its button, and the line that reports on a search.
+
+        Two rows rather than one. The left sidebar's minimum width leaves this
+        panel narrow on smaller windows, and a single row of box + button +
+        status is the first thing to be clipped; stacking the status underneath
+        keeps the box usable at the widths this panel actually gets.
+        """
+        self.search_bar = QWidget(self)
+        column = QVBoxLayout(self.search_bar)
+        column.setContentsMargins(0, 0, 0, 2)
+        column.setSpacing(2)
+
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+
+        self.search_box = QLineEdit(self.search_bar)
+        self.search_box.setPlaceholderText("Search this document…")
+        self.search_box.setClearButtonEnabled(True)
+        # Small, so the box shrinks with the panel instead of clipping it.
+        self.search_box.setMinimumWidth(60)
+        self.search_box.returnPressed.connect(self._run_search)
+        row.addWidget(self.search_box, 1)
+
+        self.search_button = QPushButton("Find", self.search_bar)
+        self.search_button.clicked.connect(self._run_search)
+        row.addWidget(self.search_button, 0)
+        column.addLayout(row)
+
+        self.search_status = QLabel("", self.search_bar)
+        self.search_status.setStyleSheet("color: #555;")
+        self.search_status.setWordWrap(True)
+        column.addWidget(self.search_status)
+        return self.search_bar
+
+    def _build_results(self):
+        self.results_list = QListWidget(self)
+        self.results_list.setMaximumHeight(150)
+        self.results_list.setVisible(False)
+        self.results_list.itemActivated.connect(self._on_result_chosen)
+        self.results_list.itemClicked.connect(self._on_result_chosen)
+        return self.results_list
+
+    def _run_search(self):
+        query = self.search_box.text().strip()
+        if not query:
+            self.clear_search()
+            return
+        self.searchRequested.emit(query)
+
+    def _on_result_chosen(self, item):
+        if item is None:
+            return
+        payload = item.data(Qt.UserRole) or {}
+        if not payload.get("selectable", True):
+            self.search_status.setText("That page is outside this row.")
+            return
+        self.pageRequested.emit(int(payload.get("page_index", 0)))
+
+    def show_search_results(self, query, results, truncated=False) -> None:
+        """Display what the controller found. Called back after a request."""
+        self.results_list.clear()
+        results = list(results or [])
+
+        if not results:
+            self.search_status.setText(f"No match for “{query}”")
+            self.results_list.setVisible(False)
+            return
+
+        for result in results:
+            item = QListWidgetItem(
+                f"{result.get('location', '')}  {result.get('snippet', '')}"
+            )
+            item.setData(Qt.UserRole, result)
+            if not result.get("selectable", True):
+                item.setForeground(QColor("#8A8A8A"))
+                item.setToolTip("Outside the pages this MID row covers.")
+            self.results_list.addItem(item)
+
+        count = len(results)
+        summary = f"{count} match{'' if count == 1 else 'es'}"
+        if truncated:
+            summary += " (showing the first ones)"
+        self.search_status.setText(summary)
+        self.results_list.setVisible(True)
+
+    def clear_search(self) -> None:
+        self.results_list.clear()
+        self.results_list.setVisible(False)
+        self.search_status.setText("")
+
+    def search_scope(self) -> str:
+        return self.setting("searchScope", SEARCH_IN_RANGE)
+
+    def settings_applied(self) -> None:
+        self.search_bar.setVisible(bool(self.setting("showSearchBar", True)))
+        if not self.setting("showSearchBar", True):
+            self.clear_search()
 
     # ------------------------------------------------------------------
     # Presenting state
@@ -119,6 +226,7 @@ class ScrapedTextPanel(ContentPanel):
 
     def clear(self) -> None:
         self.editor.clear()
+        self.clear_search()
 
     def highlight(self, terms) -> None:
         """Highlight every occurrence of ``(text, QColor)`` pairs in ``terms``."""

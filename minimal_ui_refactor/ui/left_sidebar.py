@@ -29,7 +29,12 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from .widgets import configure_button, configure_text_box
+from .widgets import (
+    FIELD_BOX_MAX_HEIGHT,
+    FIELD_BOX_MIN_HEIGHT,
+    configure_button,
+    configure_text_box,
+)
 
 #: Backgrounds used when marking sidebar text inside the content panel.
 FIELD_HIGHLIGHT_PALETTE = (
@@ -47,6 +52,9 @@ ALL_MODES = ("user", "dev", "reviewer")
 
 #: Checkboxes are laid out across this many columns before wrapping.
 TOGGLE_COLUMNS = 2
+
+#: How narrow one checkbox cell may become. See the note where it is applied.
+TOGGLE_MIN_WIDTH = 90
 
 
 @dataclass(frozen=True)
@@ -122,6 +130,7 @@ class LeftSidebar(QWidget):
         self._mode_widgets: dict[str, list[QWidget]] = {mode: [] for mode in ALL_MODES}
 
         self.info_labels: dict[str, QLabel] = {}
+        self.statistic_labels: dict[str, QLabel] = {}
         self.field_editors: dict[str, QTextEdit] = {}
         self.add_level_buttons: dict[str, QPushButton] = {}
         self.field_buttons: dict[str, QPushButton] = {}
@@ -146,15 +155,32 @@ class LeftSidebar(QWidget):
     # Construction
     # ------------------------------------------------------------------
     def _build_info_block(self):
-        info_layout = QVBoxLayout()
+        # Kept on the instance so the ordering inside it can be asserted: the
+        # statistics block is specified to sit directly above the counter.
+        info_layout = self.info_layout = QVBoxLayout()
+
+        # Session statistics, when the user has pinned any. Its own layout so
+        # the set can be changed from Settings without rebuilding the sidebar,
+        # and above the entry counter because it is context for it rather than
+        # part of the row on screen.
+        self.statistics_layout = QVBoxLayout()
+        self.statistics_layout.setContentsMargins(0, 0, 0, 0)
+        self.statistics_layout.setSpacing(1)
+        info_layout.addLayout(self.statistics_layout)
 
         self.entry_index_label = QLabel("Entry 0 of 0")
         self.entry_index_label.setStyleSheet("font-weight: bold;")
+        self.entry_index_label.setWordWrap(True)
         info_layout.addWidget(self.entry_index_label)
 
         for spec in self.context.info:
             label = QLabel(f"{spec.title}: ")
             label.setStyleSheet("font-weight: bold;")
+            # Wrapped, because one of these carries the document's filename.
+            # A label that cannot wrap reports its minimum width as the full
+            # width of its text, so a long filename would the whole
+            # sidebar open and could never be read anyway.
+            label.setWordWrap(True)
             info_layout.addWidget(label)
             self.info_labels[spec.key] = label
 
@@ -175,6 +201,15 @@ class LeftSidebar(QWidget):
     def _build_fields_group(self):
         group = QGroupBox("Fields")
         form = QFormLayout()
+        # A form row is normally label-beside-field, and its minimum width is
+        # therefore both of them together. Allowing a long row to stack instead
+        # lets the whole sidebar be made much narrower before anything clips.
+        form.setRowWrapPolicy(QFormLayout.WrapLongRows)
+        form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        # Tight, so the whole sidebar fits without scrolling on an ordinary
+        # window. Empty spacer rows used to separate the blocks below; spacing
+        # does the same job in a fraction of the height.
+        form.setVerticalSpacing(6)
 
         for index, spec in enumerate(self.context.fields):
             color = FIELD_HIGHLIGHT_PALETTE[index % len(FIELD_HIGHLIGHT_PALETTE)]
@@ -186,6 +221,8 @@ class LeftSidebar(QWidget):
             row_layout.setSpacing(6)
 
             editor = configure_text_box(QTextEdit())
+            editor.setMaximumHeight(FIELD_BOX_MAX_HEIGHT)
+            editor.setMinimumHeight(FIELD_BOX_MIN_HEIGHT)
             editor.textChanged.connect(self.userEdited)
             self.field_editors[spec.key] = editor
             row_layout.addWidget(editor, 1)
@@ -225,16 +262,19 @@ class LeftSidebar(QWidget):
         return group
 
     def _add_classification_controls(self, form):
-        scheme_row = QHBoxLayout()
-        scheme_row.setSpacing(8)
+        # Label above the combo rather than beside it. Side by side, the two
+        # together set a floor on the sidebar's width that neither needs on
+        # its own, and wrapping the label instead clips its second line.
+        scheme_container = QWidget()
+        scheme_row = QVBoxLayout(scheme_container)
+        scheme_row.setContentsMargins(0, 0, 0, 0)
+        scheme_row.setSpacing(2)
         scheme_row.addWidget(QLabel("Classification Scheme:"))
 
         self.scheme_combo = QComboBox()
         scheme_row.addWidget(self.scheme_combo)
-        scheme_row.addStretch(1)
 
-        form.addRow("", QWidget())
-        form.addRow(scheme_row)
+        form.addRow(scheme_container)
 
         metric_container = QWidget()
         metric_layout = QVBoxLayout(metric_container)
@@ -249,7 +289,6 @@ class LeftSidebar(QWidget):
         self.metric_status_layout.setContentsMargins(0, 0, 0, 0)
         metric_layout.addWidget(self.metric_status_container)
 
-        form.addRow("", QWidget())
         form.addRow(metric_container)
 
         self.scheme_combo.currentTextChanged.connect(self._on_scheme_combo_changed)
@@ -290,6 +329,13 @@ class LeftSidebar(QWidget):
                 cell_layout.addWidget(counter)
 
             cell_layout.addStretch(1)
+            # A QCheckBox reports the full width of its label as its minimum
+            # and cannot wrap, so a grid of them would hold the sidebar open.
+            # The label is repeated as a tooltip for when it is clipped.
+            box.setMinimumWidth(TOGGLE_MIN_WIDTH)
+            if not box.toolTip():
+                box.setToolTip(spec.label)
+            cell.setMinimumWidth(TOGGLE_MIN_WIDTH)
             grid.addWidget(cell, index // TOGGLE_COLUMNS, index % TOGGLE_COLUMNS)
 
         container = QWidget()
@@ -571,6 +617,37 @@ class LeftSidebar(QWidget):
 
     def set_entry_position(self, current: int, total: int) -> None:
         self.entry_index_label.setText(f"Entry {current:,} of {total:,}")
+
+    def set_statistic_specs(self, specs) -> None:
+        """Rebuild the pinned-statistics block from ``(key, label)`` pairs.
+
+        Called whenever the user's choice changes, so the block appears and
+        disappears without a restart. Passing nothing empties it, which is the
+        default state.
+        """
+        while self.statistics_layout.count():
+            item = self.statistics_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+        self.statistic_labels.clear()
+
+        for key, title in specs or ():
+            label = QLabel(f"{title}: —")
+            # Lighter than the entry counter below it: this is context for the
+            # work, not the work itself.
+            label.setStyleSheet("color: #4A5A6B;")
+            label.setWordWrap(True)
+            self.statistics_layout.addWidget(label)
+            self.statistic_labels[key] = label
+
+    def set_statistic_values(self, values) -> None:
+        for key, label in self.statistic_labels.items():
+            if key not in values:
+                continue
+            title = label.text().split(":", 1)[0]
+            label.setText(f"{title}: {values[key]}")
 
     def set_info_values(self, values) -> None:
         for key, label in self.info_labels.items():

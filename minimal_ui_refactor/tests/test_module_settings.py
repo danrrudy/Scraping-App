@@ -113,7 +113,7 @@ pytest.importorskip("pytestqt", reason="pytest-qt is required for Qt fixtures")
 from PyQt5.QtCore import QPoint, Qt  # noqa: E402
 from PyQt5.QtGui import QMouseEvent, QPixmap  # noqa: E402
 
-from ui.document_view import DocumentView  # noqa: E402
+from ui.document_view import CLICK_NOTHING, DocumentView  # noqa: E402
 
 
 def _click(view, button):
@@ -166,8 +166,9 @@ def test_click_rotation_can_be_switched_off(viewer):
     _click(viewer, Qt.LeftButton)
     assert viewer.rotation() == 90
 
-    # Turning the setting off also straightens the page back up.
-    viewer.apply_settings({"clickRotation": False})
+    # Choosing another behaviour also straightens the page back up: a click
+    # can no longer undo the rotation it made.
+    viewer.apply_settings({"clickAction": CLICK_NOTHING})
     assert viewer.rotation() == 0
 
     _click(viewer, Qt.LeftButton)

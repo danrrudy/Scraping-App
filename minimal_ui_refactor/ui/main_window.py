@@ -15,11 +15,12 @@ methods defined here.
 
 from __future__ import annotations
 
-from PyQt5.QtCore import QObject, Qt
+from PyQt5.QtCore import QEvent, QObject, Qt
 from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import (
     QAction,
     QActionGroup,
+    QScrollArea,
     QShortcut,
     QSplitter,
     QVBoxLayout,
@@ -50,7 +51,17 @@ ACTION_HANDLERS = {
     # Menu-only actions. They are declared here too so every UI action
     # resolves through one table.
     "first_unedited_entry": "goto_first_unedited_entry",
+    "open_statistics": "open_statistics",
 }
+
+#: Qt's "no maximum" sentinel, for lifting a maximum we set ourselves.
+QWIDGETSIZE_MAX = (1 << 24) - 1
+
+#: How narrow the sidebar may be dragged. Below what its content needs, on
+#: purpose: the sidebar is in a scroll area, so squeezing it past the point
+#: where everything fits scrolls rather than clips, and the document and the
+#: content panel get the room instead.
+SIDEBAR_MINIMUM_WIDTH = 180
 
 #: Single-key transfer shortcuts, in order. How many are bound is the
 #: content panel's decision, not the window's.
@@ -81,6 +92,7 @@ class MainWindowUI(QObject):
         self.module_settings = dict(module_settings or {})
 
         self.left = None
+        self.left_scroll = None
         self.document_view = None
         self.content_panel = None
 
@@ -104,6 +116,20 @@ class MainWindowUI(QObject):
         self.app.setCentralWidget(central)
 
         self.left = LeftSidebar(self.context, central)
+        # In a scroll area so the splitter can make it narrower than its
+        # contents need. Without this the widest control in the sidebar sets a
+        # floor on the whole pane, and there is no way for a user to get that
+        # width back for the document.
+        self.left_scroll = QScrollArea(central)
+        self.left_scroll.setWidget(self.left)
+        self.left_scroll.setWidgetResizable(True)
+        self.left_scroll.setFrameShape(QScrollArea.NoFrame)
+        self.left_scroll.setMinimumWidth(SIDEBAR_MINIMUM_WIDTH)
+        # Watched so the sidebar can be held to the height of its viewport
+        # whenever its content is able to compress that far. See
+        # _fit_sidebar_to_viewport.
+        self.left_scroll.viewport().installEventFilter(self)
+
         self.document_view = DocumentView(central)
 
         self._panel_host = QWidget(central)
@@ -111,10 +137,17 @@ class MainWindowUI(QObject):
         self._panel_layout.setContentsMargins(0, 0, 0, 0)
 
         self.splitter = QSplitter(Qt.Horizontal, central)
-        self.splitter.addWidget(self.left)
+        # A little wider than the default: these handles are now the way a
+        # user reclaims space from the sidebar, so they should be easy to grab.
+        self.splitter.setHandleWidth(8)
+        self.splitter.addWidget(self.left_scroll)
         self.splitter.addWidget(self.document_view)
         self.splitter.addWidget(self._panel_host)
-        self.splitter.setStretchFactor(0, 1)
+        # The sidebar takes the width its content needs and keeps it; extra
+        # space goes to the document and the panel, which are the two that
+        # benefit from it. The user can still drag it narrower — down to
+        # SIDEBAR_MINIMUM_WIDTH, scrolling what no longer fits.
+        self.splitter.setStretchFactor(0, 0)
         self.splitter.setStretchFactor(1, 3)
         self.splitter.setStretchFactor(2, 2)
         self.splitter.setCollapsible(0, False)
@@ -135,6 +168,34 @@ class MainWindowUI(QObject):
             self._log("warning", f"Sidebar control '{action}' has no handler")
         self._log("debug", "Main window UI constructed")
 
+    def eventFilter(self, watched, event):
+        if (
+            self.left_scroll is not None
+            and watched is self.left_scroll.viewport()
+            and event.type() == QEvent.Resize
+        ):
+            self._fit_sidebar_to_viewport()
+        return super().eventFilter(watched, event)
+
+    def _fit_sidebar_to_viewport(self) -> None:
+        """Keep the sidebar within its viewport while its content allows it.
+
+        The editable fields are vertically expanding within a maximum, so the
+        column can absorb a shorter window by making them shorter — but only
+        if something holds it to the viewport's height. Left to itself the
+        scroll area sizes the sidebar to what its content would prefer and
+        shows a scrollbar that was never needed.
+
+        Once the content genuinely cannot fit, the cap is lifted and the
+        scrollbar appears, which is the point at which it is telling the user
+        something true.
+        """
+        viewport_height = self.left_scroll.viewport().height()
+        if self.left.minimumSizeHint().height() <= viewport_height:
+            self.left.setMaximumHeight(viewport_height)
+        else:
+            self.left.setMaximumHeight(QWIDGETSIZE_MAX)
+
     def _connect_controller(self) -> None:
         """Wire every sidebar signal to its controller method, in one place."""
         self.left.actionTriggered.connect(self._dispatch_action)
@@ -146,6 +207,12 @@ class MainWindowUI(QObject):
         self._connect_if_present(self.left.toggleChanged, "on_toggle_changed")
         self._connect_if_present(self.left.counterChanged, "on_counter_changed")
         self._connect_if_present(self.left.userEdited, "on_entry_edited_by_user")
+        self._connect_if_present(
+            self.document_view.pageStepRequested, "step_page"
+        )
+        self._connect_if_present(
+            self.document_view.entryStepRequested, "step_entry"
+        )
 
     def _connect_if_present(self, signal, handler_name: str) -> None:
         handler = getattr(self.app, handler_name, None)
@@ -210,6 +277,27 @@ class MainWindowUI(QObject):
             view_menu.addAction(action)
             self._panel_actions[panel_id] = action
         self._sync_panel_actions()
+
+        # Everything about the person doing the work, rather than the document
+        # in front of them. Settings appears here as well as on the sidebar
+        # button: this is where a user looks for it.
+        user_menu = menu_bar.addMenu("&User")
+
+        user_settings_action = QAction("&Settings…", self.app)
+        user_settings_action.setStatusTip(
+            "Configure the MID, the sidebar, and the tools that read documents."
+        )
+        user_settings_action.triggered.connect(
+            lambda: self._dispatch_action("open_settings")
+        )
+        user_menu.addAction(user_settings_action)
+
+        statistics_action = QAction("S&tatistics…", self.app)
+        statistics_action.setStatusTip("How far this session has got, and how fast.")
+        statistics_action.triggered.connect(
+            lambda: self._dispatch_action("open_statistics")
+        )
+        user_menu.addAction(statistics_action)
 
         self._menu_initialized = True
 
@@ -304,6 +392,12 @@ class MainWindowUI(QObject):
         self.content_panel.apply_settings(self.module_settings.get(panel_id, {}))
         self.content_panel.set_transfer_targets(self.left.transfer_targets())
         self.content_panel.transferRequested.connect(self._on_transfer_requested)
+        self._connect_if_present(
+            self.content_panel.searchRequested, "search_document"
+        )
+        self._connect_if_present(
+            self.content_panel.pageRequested, "go_to_document_page"
+        )
         self._panel_layout.addWidget(self.content_panel)
         self.content_panel.set_content(self._content_payload)
         self._sync_panel_actions()
@@ -334,6 +428,25 @@ class MainWindowUI(QObject):
 
     def selection(self) -> str:
         return self.content_panel.selection()
+
+    def show_search_results(self, query, results, truncated=False) -> None:
+        if self.content_panel is not None:
+            self.content_panel.show_search_results(query, results, truncated)
+
+    def clear_search(self) -> None:
+        panel = self.content_panel
+        if panel is not None and hasattr(panel, "clear_search"):
+            panel.clear_search()
+
+    def search_scope(self):
+        """How far the active panel's search is configured to reach."""
+        panel = self.content_panel
+        if panel is not None and hasattr(panel, "search_scope"):
+            return panel.search_scope()
+        return None
+
+    def panel_supports_search(self) -> bool:
+        return bool(getattr(self.content_panel, "supports_search", False))
 
     def refresh_highlights(self) -> None:
         """Mark sidebar values wherever they appear in the content panel."""
@@ -484,6 +597,16 @@ class MainWindowUI(QObject):
 
     def set_entry_position(self, current: int, total: int) -> None:
         self.left.set_entry_position(current, total)
+
+    def set_statistic_specs(self, specs) -> None:
+        """Which session statistics are pinned above the entry counter."""
+        self.left.set_statistic_specs(specs)
+
+    def set_statistic_values(self, values) -> None:
+        self.left.set_statistic_values(values)
+
+    def pinned_statistic_keys(self) -> tuple[str, ...]:
+        return tuple(self.left.statistic_labels)
 
     def set_info_values(self, values) -> None:
         self.left.set_info_values(values)

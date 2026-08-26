@@ -251,6 +251,11 @@ default_settings = {
     # Buttons that compute one editable field from the others. Project
     # specific, so empty by default; defined in Settings > Configure Buttons.
     "fieldButtons": [],
+    # Session statistics pinned to the sidebar, above the entry counter. Keys
+    # from session_metrics.METRIC_KEYS. Empty by default: every metric is
+    # always available under User > Statistics, so nothing needs to occupy the
+    # sidebar until the user asks for it.
+    "statisticsOnMainWindow": [],
     # Per-module settings, keyed by module id. Modules declare what they hold
     # (see module_settings.py); entries for modules that are not currently
     # loaded are kept so a user's configuration survives switching away.
@@ -299,6 +304,51 @@ def load_settings(path=SETTINGS_PATH):
     except Exception as e:
         print(f"[Warning] Failed to load settings: {e}")
         return deepcopy(default_settings)
+
+
+#: Module settings whose shape has changed between releases. Each entry maps a
+#: module id to a function taking that module's stored values and returning
+#: them updated, or ``None`` when nothing needed doing.
+def _migrate_document_view(values):
+    """Carry the old ``clickRotation`` flag into the ``clickAction`` choice.
+
+    Clicking the page used to be a yes/no rotation. It is now a choice of
+    several behaviours, and a user who had turned rotation off would otherwise
+    find it silently switched back on by the new default.
+    """
+    if "clickAction" in values or "clickRotation" not in values:
+        return None
+    rotating = values.get("clickRotation")
+    if isinstance(rotating, str):
+        rotating = rotating.strip().lower() in {"true", "1", "yes", "y"}
+    updated = {key: value for key, value in values.items() if key != "clickRotation"}
+    updated["clickAction"] = "Rotate the page" if rotating else "Nothing"
+    return updated
+
+
+_MODULE_MIGRATIONS = {"document_view": _migrate_document_view}
+
+
+def migrate_settings(settings) -> bool:
+    """Bring a settings dict up to date in place. Returns whether it changed.
+
+    Run once at start-up, before anything reads module settings: resolving a
+    module drops keys it no longer declares, so a value has to be carried
+    across while the old key is still there.
+    """
+    changed = False
+    modules = (settings or {}).get("moduleSettings") or {}
+    for module_id, migrate in _MODULE_MIGRATIONS.items():
+        stored = modules.get(module_id)
+        if not isinstance(stored, dict):
+            continue
+        updated = migrate(stored)
+        if updated is not None:
+            modules[module_id] = updated
+            changed = True
+    if changed:
+        settings["moduleSettings"] = modules
+    return changed
 
 
 def save_settings(settings, path=SETTINGS_PATH):

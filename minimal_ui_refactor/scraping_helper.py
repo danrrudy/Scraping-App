@@ -7,7 +7,7 @@ from io import BytesIO
 
 import fitz  # PyMuPDF
 import pandas as pd
-from PyQt5.QtCore import QEvent, QProcess, Qt
+from PyQt5.QtCore import QEvent, QProcess, Qt, QTimer
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtWidgets import (
     QApplication,
@@ -26,12 +26,22 @@ from app_settings import (
     save_settings,
 )
 from audit_runner import run_mid_audit
-from document_session import DocumentSession
+from document_session import DocumentSession, DocumentSessionCache
+from document_text import (
+    SEARCH_ANYWHERE,
+    SEARCH_IN_RANGE,
+    SEARCH_LIMIT,
+    DocumentIndex,
+    DocumentIndexCache,
+)
 from extractor_loader import select_extractor_class
 from logger import setup_logger
 from mid_manager import MIDManager
 from mid_schema import LEGACY_HIERARCHY_COLUMNS, MIDSchema
 import paths
+import session_metrics
+from session_metrics import SessionMetrics
+from statistics_dialog import REFRESH_MILLISECONDS, StatisticsDialog
 from scraper_loader import select_scraper_class
 import field_formula
 import module_settings
@@ -75,6 +85,10 @@ class TextScrapingReviewApp(QMainWindow):
         #        self.resize(1200, 800)
 
         self.settings = load_settings()
+        # Built before the MID loads, so the session clock starts at the
+        # moment the window did rather than when the first row appeared.
+        self.metrics = SessionMetrics()
+        self.statistics_timer = None
         self.mid_schema = MIDSchema.from_settings(self.settings)
         # Checkboxes are user-defined; their columns are created if the MID
         # does not already have them.
@@ -139,6 +153,10 @@ class TextScrapingReviewApp(QMainWindow):
         # Every row pointing at the same document and page range shares one
         # session, so the open PDF and its scraped text are not per-row state.
         self.document_session = None
+        # Recently-used documents, so stepping back to one does not re-scrape
+        # it, and their search indexes, so it is not re-read either.
+        self.session_cache = DocumentSessionCache()
+        self.index_cache = DocumentIndexCache()
         self.current_page_index = 0  # Index of current page, not page number
         self.current_document_key = None
         self.current_observation_label = ""
@@ -182,6 +200,7 @@ class TextScrapingReviewApp(QMainWindow):
         self.ui.setup()
         self.installEventFilter(self)
         self.remember_loaded_modules()
+        self.apply_statistics_settings()
 
         # Reopen where a restart left off, if we were told to.
         self.restore_resume_index()
@@ -236,6 +255,49 @@ class TextScrapingReviewApp(QMainWindow):
         if changed:
             save_settings(self.settings)
             self.logger.info("Recorded module settings for the loaded modules")
+
+    # ------------------------------------------------------------------
+    # Session statistics
+    # ------------------------------------------------------------------
+    def open_statistics(self):
+        """Show every metric for this session, read-only."""
+        self.refresh_statistics()
+        StatisticsDialog(self.metrics, self).exec_()
+
+    def pinned_statistic_keys(self):
+        """Which metrics the user has asked to see on the main window."""
+        return session_metrics.normalize_metric_keys(
+            self.settings.get("statisticsOnMainWindow", [])
+        )
+
+    def apply_statistics_settings(self):
+        """Rebuild the sidebar's statistics block from the current settings.
+
+        Called at start-up and again whenever Settings closes, so pinning a
+        metric takes effect immediately rather than at the next restart.
+        """
+        keys = self.pinned_statistic_keys()
+        self.ui.set_statistic_specs(
+            [(key, session_metrics.METRICS_BY_KEY[key].label) for key in keys]
+        )
+
+        # The clock only needs to tick while something is showing it.
+        if keys:
+            if self.statistics_timer is None:
+                self.statistics_timer = QTimer(self)
+                self.statistics_timer.setInterval(REFRESH_MILLISECONDS)
+                self.statistics_timer.timeout.connect(self.refresh_statistics)
+            self.statistics_timer.start()
+            self.refresh_statistics()
+        elif self.statistics_timer is not None:
+            self.statistics_timer.stop()
+
+    def refresh_statistics(self):
+        """Re-read the metrics that depend on the MID, then repaint the block."""
+        manager = getattr(self, "mid_manager", None)
+        if manager is not None and manager.df is not None:
+            self.metrics.set_entries_remaining(manager.unedited_count())
+        self.ui.set_statistic_values(self.metrics.snapshot())
 
     # ------------------------------------------------------------------
     # Restart
@@ -660,9 +722,20 @@ class TextScrapingReviewApp(QMainWindow):
             self.logger.debug(f"Reusing open session for {path}")
             return True
 
+        # The one we are leaving goes back to the cache rather than being
+        # closed, so returning to it costs nothing. The cache closes whatever
+        # it evicts.
         if session is not None:
-            session.close()
+            self.session_cache.put(session)
             self.document_session = None
+
+        cached = self.session_cache.take(path, page_indices)
+        if cached is not None:
+            self.logger.debug(f"Reusing cached session for {path}")
+            self.document_session = cached
+            return True
+
+        self.metrics.record_document_opened(path)
 
         try:
             session = DocumentSession(
@@ -683,6 +756,103 @@ class TextScrapingReviewApp(QMainWindow):
             session.reset_content()
 
         return True
+
+    # ------------------------------------------------------------------
+    # Searching the document
+    # ------------------------------------------------------------------
+    def document_index(self):
+        """The search index for the open document, built or reused.
+
+        Rebuilt when the cached index belongs to a document that has since
+        been closed — an evicted session takes its PDF with it.
+        """
+        session = self.document_session
+        if session is None or session.doc is None:
+            return None
+
+        index = self.index_cache.get(session.path)
+        if index is None or index.document is not session.doc:
+            index = DocumentIndex(session.doc, session.page_indices, logger=self.logger)
+            self.index_cache.put(session.path, index)
+
+        index.set_in_range_pages(session.page_indices)
+        # What the scraper made of each page, including anything the user has
+        # corrected in the panel, so a search finds what they can see.
+        for local_index, absolute in enumerate(session.page_indices):
+            index.set_scraped_text(absolute, session.text_at(local_index))
+        return index
+
+    def search_document(self, query):
+        """Find ``query`` across the open document and hand back the hits."""
+        index = self.document_index()
+        if index is None:
+            self.ui.show_search_results(query, [])
+            return
+
+        scope = self.ui.search_scope() or SEARCH_IN_RANGE
+        hits = index.search(query, whole_document=scope != SEARCH_IN_RANGE)
+        may_leave_range = scope == SEARCH_ANYWHERE
+
+        results = [
+            {
+                "page_index": hit.page_index,
+                "location": hit.location,
+                "snippet": hit.snippet,
+                "selectable": hit.in_range or may_leave_range,
+            }
+            for hit in hits
+        ]
+        self.logger.info(
+            f"Search for '{query}' found {len(results)} match(es) "
+            f"in {self.current_document_name}"
+        )
+        self.ui.show_search_results(
+            query, results, truncated=len(hits) >= SEARCH_LIMIT
+        )
+
+    def go_to_document_page(self, page_index):
+        """Show the page a search result points at.
+
+        A page this row covers becomes the current page, exactly as the page
+        buttons would make it. A page outside the row is *previewed* instead:
+        it is drawn, but the current page is left alone, because the current
+        page is written into the MID and a row should not come to reference a
+        page it is not about.
+        """
+        session = self.document_session
+        if session is None:
+            return
+
+        page_index = int(page_index)
+        if page_index in session.page_indices:
+            self.current_page_index = session.page_indices.index(page_index)
+            # The page is written into the row, so moving is an edit to it.
+            self.mark_entry_dirty()
+            self.show_page()
+            self.ui.set_status_message(f"Page {page_index + 1}", 3000)
+            return
+
+        self.preview_document_page(page_index)
+
+    def preview_document_page(self, page_index):
+        """Draw a page outside this row's range without adopting it."""
+        session = self.document_session
+        if session is None or session.doc is None:
+            return
+        try:
+            page = session.doc.load_page(int(page_index))
+            pixmap = page.get_pixmap(matrix=fitz.Matrix(2.0, 2.0))
+        except Exception as exc:
+            self.logger.warning(f"Could not preview page {page_index + 1}: {exc}")
+            return
+
+        self.ui.show_page_pixmap(fitz_pixmap_to_qpixmap(pixmap))
+        self.ui.set_status_message(
+            f"Previewing page {page_index + 1}, which is outside this entry. "
+            "Move a page or an entry to go back.",
+            0,
+        )
+        self.logger.info(f"Previewed out-of-range page {page_index + 1}")
 
     def _focus_page_from_row(self, row, label):
         """Honour this row's Page field within the shared session."""
@@ -758,6 +928,32 @@ class TextScrapingReviewApp(QMainWindow):
 
         # Display document information
         self.update_info_labels()
+
+    # ------------------------------------------------------------------
+    # Clicking the page
+    # ------------------------------------------------------------------
+    def step_page(self, direction: int) -> None:
+        """Move a page, from a click on the viewer.
+
+        The viewer asks rather than acts: only here is it known whether there
+        is a next page, and stepping past the end should do nothing rather
+        than wrap round to the other end of the document.
+        """
+        if int(direction) > 0:
+            self.next_page()
+        else:
+            self.prev_page()
+
+    def step_entry(self, direction: int) -> None:
+        """Move a MID entry, from a click on the viewer.
+
+        Routed through the normal entry navigation so the sidebar is committed
+        first; a click must not lose an edit that a button press would keep.
+        """
+        if int(direction) > 0:
+            self.next_mid_entry()
+        else:
+            self.prev_mid_entry()
 
     def resizeEvent(self, event):
         self.logger.debug("Window resized")
@@ -1109,6 +1305,7 @@ class TextScrapingReviewApp(QMainWindow):
             old_mid_df = None
 
         old_modules = self.resolved_module_settings()
+        old_statistics = self.pinned_statistic_keys()
         dialog = SettingsDialog(
             self.settings,
             self,
@@ -1124,12 +1321,22 @@ class TextScrapingReviewApp(QMainWindow):
             save_settings(self.settings)
             self.mode = self.settings.get("userMode", "User")
             self.update_mode_ui()
+            new_statistics = self.pinned_statistic_keys()
 
             # Module settings take effect immediately; no restart needed.
             new_modules = self.resolved_module_settings()
             if new_modules != old_modules:
                 self.ui.apply_module_settings(new_modules)
                 self.logger.info("Applied updated module settings")
+
+            # Which statistics are pinned is only a matter of what is drawn,
+            # so it takes effect now rather than joining the restart list.
+            if new_statistics != old_statistics:
+                self.apply_statistics_settings()
+                self.logger.info(
+                    "Statistics on the main window: %s",
+                    ", ".join(new_statistics) if new_statistics else "none",
+                )
 
             new_mid_path = self.settings.get("MIDLocation", "")
             new_sheet_name = self.settings.get("MIDSheetName", 0)
@@ -1696,6 +1903,9 @@ class TextScrapingReviewApp(QMainWindow):
         # A saved change is what the persistent flag records.
         self.mid_manager.set_entry_edited(True, idx)
         self.ui.set_entry_edited_checked(True)
+        # Counted by observation rather than by commit, so revisiting a row to
+        # correct it does not report a second entry's worth of work.
+        self.metrics.record_entry_completed(self.mid_manager.observation_key(idx))
 
         details = ", ".join(
             f"{column}={self._format_for_log(value)}" for column, value in saved.items()
@@ -1775,6 +1985,11 @@ class TextScrapingReviewApp(QMainWindow):
 
     def _present_mid_row(self):
         manager = getattr(self, "mid_manager", None)
+        # Recorded here rather than on navigation so the first row, which is
+        # presented during start-up, is counted like any other.
+        if manager is not None and manager.df is not None:
+            self.metrics.record_entry_opened(manager.observation_key())
+
         row = manager.get_current_row() if manager is not None else None
         if row is None:
             self.ui.clear_fields()

@@ -368,3 +368,205 @@ def test_bound_single_keys_are_swallowed_before_reaching_an_editor(application_f
 
     passed_through = QKeyEvent(QEvent.KeyPress, Qt.Key_A, Qt.NoModifier, "a")
     assert window.eventFilter(window, passed_through) is False
+
+
+# ----------------------------------------------------------------------
+# The sidebar's width
+# ----------------------------------------------------------------------
+@pytest.mark.qt
+@pytest.mark.integration
+def test_the_sidebar_can_be_dragged_narrow(application_factory):
+    """It used to be immovable: its content set a floor on the whole pane."""
+    from ui.main_window import SIDEBAR_MINIMUM_WIDTH
+
+    window = application_factory()
+    window.resize(1600, 1000)
+
+    window.ui.splitter.setSizes([SIDEBAR_MINIMUM_WIDTH, 800, 700])
+
+    assert window.ui.splitter.sizes()[0] <= SIDEBAR_MINIMUM_WIDTH + 40
+
+
+@pytest.mark.qt
+@pytest.mark.integration
+def test_the_sidebar_does_not_take_the_extra_space(application_factory):
+    """Room gained by a wider window belongs to the document and the panel."""
+    window = application_factory()
+
+    window.resize(1280, 900)
+    narrow = window.ui.splitter.sizes()
+    window.resize(1920, 900)
+    wide = window.ui.splitter.sizes()
+
+    assert wide[0] == narrow[0], "the sidebar grew instead of the other panes"
+    assert wide[1] > narrow[1] and wide[2] > narrow[2]
+
+
+@pytest.mark.qt
+@pytest.mark.integration
+def test_the_sidebar_content_fits_at_its_default_width(application_factory):
+    """No horizontal scrollbar unless the user has chosen to squeeze it."""
+    window = application_factory()
+    window.resize(1600, 1000)
+
+    sidebar_width = window.ui.splitter.sizes()[0]
+
+    assert sidebar_width >= window.ui.left.minimumSizeHint().width()
+
+
+@pytest.mark.qt
+@pytest.mark.integration
+def test_a_long_document_name_does_not_widen_the_sidebar(application_factory):
+    """The label wraps. Unwrapped, one filename demanded over 1200px."""
+    window = application_factory()
+    before = window.ui.left.minimumSizeHint().width()
+
+    window.ui.set_info_values(
+        {"document": "2021-2022 SFPE Approved City of Clarkesville Habersham - A.pdf"}
+    )
+
+    assert window.ui.left.minimumSizeHint().width() == before
+
+
+@pytest.mark.qt
+@pytest.mark.integration
+def test_the_sidebar_scrolls_rather_than_clipping(application_factory):
+    """Squeezed past what fits, the content scrolls instead of vanishing."""
+    window = application_factory()
+    window.resize(1600, 1000)
+    window.ui.splitter.setSizes([200, 800, 600])
+    window.ui.left_scroll.horizontalScrollBar()  # exists, and is reachable
+
+    # Every control is still there to be scrolled to.
+    assert window.ui.left.control_buttons
+    assert window.ui.left.width() > 0
+
+
+@pytest.mark.qt
+@pytest.mark.integration
+def test_dragging_the_handle_actually_narrows_the_sidebar(application_factory, qtbot):
+    """Driven with real mouse events on the handle, not by calling setSizes."""
+    from PyQt5.QtCore import QEvent, QPoint, Qt as QtNS
+    from PyQt5.QtGui import QMouseEvent
+    from PyQt5.QtWidgets import QApplication
+
+    window = application_factory()
+    window.resize(1600, 1000)
+    window.show()
+    qtbot.waitExposed(window)
+
+    splitter = window.ui.splitter
+    before = splitter.sizes()[0]
+    handle = splitter.handle(1)
+
+    start = QPoint(handle.width() // 2, handle.height() // 2)
+    target = start - QPoint(300, 0)
+
+    # Sent by hand rather than with QTest.mouseMove, which does not carry the
+    # held button in `buttons` — and a splitter handle only drags while it
+    # believes a button is down. The global position matters too: a splitter
+    # works out the new boundary from it, so an event without one drags in an
+    # arbitrary direction.
+    def send(kind, position, button, buttons):
+        QApplication.sendEvent(
+            handle,
+            QMouseEvent(
+                kind,
+                position,
+                handle.mapToGlobal(position),
+                button,
+                buttons,
+                QtNS.NoModifier,
+            ),
+        )
+
+    send(QEvent.MouseButtonPress, start, QtNS.LeftButton, QtNS.LeftButton)
+    send(QEvent.MouseMove, target, QtNS.NoButton, QtNS.LeftButton)
+    send(QEvent.MouseButtonRelease, target, QtNS.LeftButton, QtNS.NoButton)
+    qtbot.wait(20)
+
+    assert splitter.sizes()[0] < before, "the handle would not drag"
+
+
+#: A schema with enough editable fields that the sidebar has to make choices
+#: about height. Mirrors a real project's configuration.
+TALL_SCHEMA = {
+    "xColumn": "Gov",
+    "yColumn": "FY",
+    "interactionColumns": [
+        "FY", "Gov", "LMIG_Exp", "Match", "Local_Exp", "Total_Exp", "Field_Audit"
+    ],
+    "documentColumn": "agency_yr",
+    "pageColumn": "",
+    "formatColumn": "",
+    "keywordColumn": "",
+    "entryLabel": "x_paren_y",
+}
+
+
+@pytest.mark.qt
+@pytest.mark.integration
+def test_the_sidebar_compresses_instead_of_scrolling(application_factory, qtbot):
+    """A shorter window makes the fields shorter, not a scrollbar appear."""
+    from PyQt5.QtWidgets import QApplication
+
+    # Enough fields that the column has something to compress; the default
+    # test schema is short enough to fit at full height either way.
+    window = application_factory(schema=TALL_SCHEMA)
+    window.show()
+    qtbot.waitExposed(window)
+
+    window.resize(1600, 1000)
+    qtbot.wait(60)
+    QApplication.processEvents()
+    tall_editor = next(iter(window.ui.left.field_editors.values())).height()
+    assert not window.ui.left_scroll.verticalScrollBar().isVisible()
+
+    window.resize(1600, 860)
+    qtbot.wait(60)
+    QApplication.processEvents()
+    short_editor = next(iter(window.ui.left.field_editors.values())).height()
+
+    assert short_editor < tall_editor, "the fields did not compress"
+    assert not window.ui.left_scroll.verticalScrollBar().isVisible()
+
+
+@pytest.mark.qt
+@pytest.mark.integration
+def test_the_scrollbar_appears_once_compressing_is_not_enough(
+    application_factory, qtbot
+):
+    """It should still be there when it is telling the user something true."""
+    from PyQt5.QtWidgets import QApplication
+    from ui.widgets import FIELD_BOX_MIN_HEIGHT
+
+    window = application_factory(schema=TALL_SCHEMA)
+    window.show()
+    qtbot.waitExposed(window)
+    window.resize(1600, 400)
+    qtbot.wait(60)
+    QApplication.processEvents()
+
+    assert window.ui.left_scroll.verticalScrollBar().isVisible()
+    # And the fields are back to a usable height rather than crushed.
+    editor = next(iter(window.ui.left.field_editors.values()))
+    assert editor.height() > FIELD_BOX_MIN_HEIGHT
+
+
+@pytest.mark.qt
+@pytest.mark.integration
+def test_a_field_is_never_squeezed_below_a_readable_line(
+    application_factory, qtbot
+):
+    from PyQt5.QtWidgets import QApplication
+    from ui.widgets import FIELD_BOX_MIN_HEIGHT
+
+    window = application_factory(schema=TALL_SCHEMA)
+    window.show()
+    qtbot.waitExposed(window)
+    for height in (900, 800, 700, 600, 500):
+        window.resize(1600, height)
+        qtbot.wait(40)
+        QApplication.processEvents()
+        for editor in window.ui.left.field_editors.values():
+            assert editor.height() >= FIELD_BOX_MIN_HEIGHT

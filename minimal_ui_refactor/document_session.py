@@ -12,6 +12,8 @@ The session owns the document domain only. It never touches Qt; callers convert
 
 from __future__ import annotations
 
+from collections import OrderedDict
+
 import fitz  # PyMuPDF
 
 
@@ -162,3 +164,67 @@ class DocumentSession:
                 self.logger.warning(f"Failed to close {self.path}: {exc}")
         finally:
             self.doc = None
+
+
+class DocumentSessionCache:
+    """The most recently used sessions, so going back does not re-scrape.
+
+    Scraping is the slow part of opening a document — every page of the file
+    when the MID has no page reference. Without a cache, stepping to the next
+    row and back again pays that cost twice.
+
+    A cached session keeps its PDF open, so the bound is a file-handle budget
+    as much as a memory one. Evicted sessions are closed; the caller is
+    responsible for nothing.
+
+    Cached sessions also keep any correction the user typed into the scraped
+    text, which is the same guarantee the shared session already gives rows
+    that point at one document.
+    """
+
+    def __init__(self, maxsize: int = 8):
+        self.maxsize = max(1, int(maxsize))
+        self._entries: "OrderedDict[tuple, DocumentSession]" = OrderedDict()
+
+    @staticmethod
+    def key_for(path, page_indices) -> tuple:
+        """Two rows share a cached session only if file *and* pages match."""
+        if page_indices is None:
+            return (str(path), None)
+        return (str(path), tuple(int(index) for index in page_indices))
+
+    def take(self, path, page_indices):
+        """Remove and return a session for these pages, or ``None``.
+
+        Removed rather than merely fetched: the caller becomes the owner, and
+        a session that is current must not also sit in the cache where a later
+        eviction could close the document out from under it.
+        """
+        session = self._entries.pop(self.key_for(path, page_indices), None)
+        if session is not None and session.doc is None:
+            # Closed behind our back; treat it as a miss.
+            return None
+        return session
+
+    def put(self, session) -> None:
+        """Hand a session back for reuse, closing whatever falls off the end."""
+        if session is None or session.doc is None:
+            return
+        key = self.key_for(
+            session.path, None if session.covers_whole_document else session.page_indices
+        )
+        existing = self._entries.pop(key, None)
+        if existing is not None and existing is not session:
+            existing.close()
+        self._entries[key] = session
+        while len(self._entries) > self.maxsize:
+            _, evicted = self._entries.popitem(last=False)
+            evicted.close()
+
+    def close_all(self) -> None:
+        for session in self._entries.values():
+            session.close()
+        self._entries.clear()
+
+    def __len__(self) -> int:
+        return len(self._entries)

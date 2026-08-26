@@ -41,6 +41,19 @@ class ContentPanel(QWidget):
     #: main window reports back to the user rather than silently ignoring.
     transferRequested = pyqtSignal(str, str)
 
+    #: Emitted when the user asks to search the document this panel is showing
+    #: content from. The panel cannot search: only the controller can reach the
+    #: open document. The argument is the query as typed.
+    searchRequested = pyqtSignal(str)
+
+    #: Emitted when the user picks a search result. The argument is the
+    #: zero-based page within the document, which the controller turns into a
+    #: move if that page is one this row may show.
+    pageRequested = pyqtSignal(int)
+
+    #: Whether this panel offers to search the whole document.
+    supports_search = False
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._transfer_targets: list[tuple[str, str]] = []
@@ -74,6 +87,13 @@ class ContentPanel(QWidget):
         """Emphasise ``terms``, a sequence of ``(text, QColor)`` pairs.
 
         Panels that cannot highlight may ignore this.
+        """
+
+    def show_search_results(self, query, results, truncated=False) -> None:
+        """Display the hits the controller found for ``query``.
+
+        Each result is a mapping with ``page_index``, ``location``,
+        ``snippet`` and ``selectable``. Panels that cannot search ignore this.
         """
 
     # ------------------------------------------------------------------
