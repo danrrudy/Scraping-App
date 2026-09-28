@@ -13,13 +13,12 @@ class DeterministicAuditScraper:
     def scrape(self):
         self.result = {
             "text": [
-                "keyword strategic objective objective goal deterministic text"
+                "keyword strategic objective objective goal metric deterministic text"
             ]
         }
 
 
 @pytest.mark.integration
-@pytest.mark.current_schema
 def test_audit_writes_detailed_and_summary_reports(
     tmp_path,
     monkeypatch,
@@ -33,20 +32,10 @@ def test_audit_writes_detailed_and_summary_reports(
     log_directory.mkdir()
     pdf_factory(
         name="AGENCY_2024.pdf",
-        page_texts=["keyword strategic objective objective goal"],
+        page_texts=["keyword strategic objective objective goal metric"],
         directory=data_directory,
     )
-    manager = manager_factory(
-        [
-            mid_row_factory(
-                **{
-                    "PDF Page Number": "1",
-                    "Format_Type": 19,
-                    "Format_Type_Updated": 19,
-                }
-            )
-        ]
-    )
+    manager = manager_factory([mid_row_factory(**{"PDF Page Number": "1"})])
     settings = {
         "dataDirectory": str(data_directory),
         "logFileDirectory": str(log_directory),
@@ -62,14 +51,19 @@ def test_audit_writes_detailed_and_summary_reports(
     report = json.loads((log_directory / "audit_report.json").read_text())
     summary = json.loads((log_directory / "audit_summary.json").read_text())
     assert report_path == str(log_directory / "audit_report.json")
-    assert report[0]["status"] == "PASS"
-    assert set(report[0]["tests"].values()) == {"PASS"}
+    entry = report["results"][0]
+    assert entry["status"] == "PASS"
+    assert set(entry["tests"].values()) == {"PASS"}
+    # Every configured field is checked against the scraped text.
+    assert {"field:stratobj", "field:obj", "field:goal", "field:metric"} <= set(
+        entry["tests"]
+    )
     assert summary["total_entries"] == 1
     assert summary["status_counts"] == {"PASS": 1, "FAIL": 0}
 
 
 @pytest.mark.integration
-def test_audit_records_missing_pdf_as_fatal_failure(
+def test_audit_records_missing_pdf_as_a_failure(
     tmp_path,
     monkeypatch,
     silent_logger,
@@ -91,6 +85,7 @@ def test_audit_records_missing_pdf_as_fatal_failure(
     audit_runner.run_mid_audit(manager, settings)
 
     report = json.loads((log_directory / "audit_report.json").read_text())
-    assert report[0]["status"] == "FAIL"
-    assert "Missing file" in report[0]["tests"]["fatal"]
-
+    entry = report["results"][0]
+    assert entry["status"] == "FAIL"
+    assert entry["tests"]["pdf_found"] == "FAIL"
+    assert report["summary"]["test_failures"]["pdf_found"] == 1

@@ -21,7 +21,30 @@ if sys.platform != "win32":
 import mid_manager as mid_manager_module
 import app_settings as app_settings_module
 from app_settings import default_settings
-from mid_manager import COLUMN_TYPES, EXPECTED_COLUMNS, MIDManager
+from mid_manager import MIDManager
+from mid_schema import MIDSchema
+
+
+#: The schema most tests run under: a document column, X/Y identifiers, a
+#: page reference, and four nested hierarchy fields. Nothing in the
+#: application knows these names; they are this suite's convention.
+TEST_SCHEMA = {
+    "xColumn": "agency",
+    "yColumn": "year",
+    "documentColumn": "Filename",
+    "pageColumn": "PDF Page Number",
+    "formatColumn": "Format_Type",
+    "keywordColumn": "keyword",
+    "entryLabel": "x_dash_y",
+    "fields": [
+        {"column": "stratobj", "label": "Strategic Objective", "hierarchy": True},
+        {"column": "obj", "label": "Objective", "hierarchy": True},
+        {"column": "goal", "hierarchy": True},
+        {"column": "metric", "hierarchy": True},
+    ],
+}
+
+HIERARCHY_COLUMNS = ("stratobj", "obj", "goal", "metric")
 
 
 @pytest.fixture
@@ -39,58 +62,35 @@ def isolate_mid_manager_logging(monkeypatch, silent_logger):
 
 
 @pytest.fixture
+def test_schema():
+    return MIDSchema.from_mapping(TEST_SCHEMA)
+
+
+@pytest.fixture
 def mid_row_factory():
-    """Build a valid synthetic row from the application's current schema."""
+    """Build a valid synthetic row for :data:`TEST_SCHEMA`."""
 
     def build(**overrides):
-        row = {}
-        for column in EXPECTED_COLUMNS:
-            column_type = COLUMN_TYPES.get(column, str)
-            if column_type is int:
-                row[column] = 0
-            elif column_type is bool:
-                row[column] = False
-            else:
-                row[column] = ""
-
-        row.update(
-            {
-                "agency_yr": "AGENCY-2024",
-                "agency": "Agency",
-                "year": 2024,
-                "agid": 1,
-                "subagency": "",
-                "stratobj": "Strategic objective",
-                "obj": "Objective",
-                "goal": "Goal",
-                "metric": "Metric",
-                "PDF Page Number": "1-2",
-                "Format": "Text",
-                "Format_Detail": "",
-                "Results_DisplayFormat": "Text",
-                "Table Name/Word Search Keyword": "keyword",
-                "Other Detail": "",
-                "Format_Type": 19,
-                "Format_Type_Updated": 19,
-                "Page": 1,
-                # Workflow columns are not all required by MIDManager, but the
-                # application expects them after loading.
-                "classification_scheme": "Performance",
-                "metric_status": "Met",
-                "target": "Target",
-                "actual": "Actual",
-                "years_to_evaluation": "",
-                "_flag": False,
-                "_no_metrics": False,
-                "_gen": False,
-                "_achieved": False,
-                "_future_dated": False,
-                "_aggregate": False,
-                "notes": "",
-                "reviewer_comments": "",
-                "reviewer_status": "",
-            }
-        )
+        row = {
+            "Filename": "AGENCY_2024",
+            "agency": "Agency",
+            "year": 2024,
+            "stratobj": "Strategic objective",
+            "obj": "Objective",
+            "goal": "Goal",
+            "metric": "Metric",
+            "PDF Page Number": "1-2",
+            "Format_Type": 19,
+            "keyword": "keyword",
+            "Page": 1,
+            # Workflow columns are created by MIDManager when absent, but the
+            # application expects them after loading.
+            "_flag": False,
+            "_gen": False,
+            "notes": "",
+            "reviewer_comments": "",
+            "reviewer_status": "",
+        }
         row.update(overrides)
         return row
 
@@ -103,7 +103,7 @@ def sample_rows(mid_row_factory):
         mid_row_factory(metric="Metric A"),
         mid_row_factory(metric="Metric B", Page=2),
         mid_row_factory(
-            agency_yr="AGENCY-2025",
+            Filename="AGENCY_2025",
             year=2025,
             stratobj="",
             obj="",
@@ -111,10 +111,9 @@ def sample_rows(mid_row_factory):
             metric="",
         ),
         mid_row_factory(
-            agency_yr="OTHER-2025",
+            Filename="OTHER_2025",
             agency="Other Agency",
             year=2025,
-            agid=2,
             stratobj="Other strategic objective",
             obj="Other objective",
             goal="Other goal",
@@ -138,10 +137,10 @@ def mid_path_factory(tmp_path):
 
 
 @pytest.fixture
-def manager_factory(mid_path_factory, sample_rows):
-    def build(rows=None, *, sheet_name=0):
+def manager_factory(mid_path_factory, sample_rows, test_schema):
+    def build(rows=None, *, sheet_name=0, schema=None):
         path = mid_path_factory(rows if rows is not None else sample_rows)
-        return MIDManager(path, sheet_name=sheet_name)
+        return MIDManager(path, sheet_name=sheet_name, schema=schema or test_schema)
 
     return build
 
@@ -179,14 +178,11 @@ def app_settings_factory(tmp_path):
                 "logFileDirectory": str(log_directory),
                 "userMode": mode,
                 "UIScale": "1.0",
-                "evaluationClasses": {
-                    "Performance": {"option_types": ["Met", "Not Met"]}
-                },
-                "defaultClass": "Performance",
+                "midSchema": copy.deepcopy(
+                    TEST_SCHEMA if schema is None else schema
+                ),
             }
         )
-        if schema is not None:
-            settings["midSchema"] = schema
         if extra_settings:
             settings.update(extra_settings)
         return settings
@@ -234,9 +230,7 @@ def application_factory(
         rows = rows or [mid_row_factory()]
         mid_path = mid_path_factory(rows)
         if documents is None:
-            documents = {
-                str(row["agency_yr"]).replace("-", "_") + ".pdf" for row in rows
-            }
+            documents = {f"{row['Filename']}.pdf" for row in rows}
         for pdf_name in documents:
             pdf_factory(name=pdf_name, directory=data_directory)
 

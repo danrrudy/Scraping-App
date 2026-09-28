@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 
 
@@ -71,9 +69,19 @@ def test_page_navigation_updates_current_page_and_text(application_factory):
 
 @pytest.mark.qt
 @pytest.mark.integration
-@pytest.mark.current_schema
 def test_sidebar_fields_commit_to_mid_and_reload(application_factory):
-    window = application_factory("User")
+    window = application_factory(
+        "User",
+        extra_settings={
+            "checkboxes": [
+                {"column": "_flag"},
+                {
+                    "column": "_future_dated",
+                    "counter": {"column": "years_to_evaluation"},
+                },
+            ]
+        },
+    )
     window.ui.set_field_text("goal", "Edited goal")
     window.ui.set_notes_text("Edited note")
     window.ui.set_toggle("flag", True)
@@ -97,22 +105,71 @@ def test_sidebar_fields_commit_to_mid_and_reload(application_factory):
 
 @pytest.mark.qt
 @pytest.mark.integration
-def test_user_accept_and_reject_write_to_isolated_output_directories(
-    application_factory, monkeypatch
-):
+def test_only_the_flag_checkbox_is_built_in(application_factory):
     window = application_factory("User")
-    monkeypatch.setattr(window, "next_mid_entry", lambda: None)
-    window.document_session.page_text_cache = ["First page", "Second page"]
 
-    # Export names are document-first so observations taken from one file
-    # cannot overwrite each other.
-    name = "AGENCY-2024__Agency__2024_full.txt"
+    assert list(window.ui.left.toggle_boxes) == ["flag"]
+    assert window.ui.left.counter_boxes == {}
+
+
+# ----------------------------------------------------------------------
+# Reviewer verdicts
+# ----------------------------------------------------------------------
+@pytest.mark.qt
+@pytest.mark.integration
+def test_reviewer_accept_records_the_verdict_and_moves_on(
+    application_factory, mid_row_factory
+):
+    window = application_factory(
+        "Reviewer", rows=[mid_row_factory(), mid_row_factory(metric="Two")]
+    )
+    window.ui.set_reviewer_notes_text("Looks right")
 
     window.accept_scrape()
-    accepted = Path(window.accept_dir) / name
-    assert accepted.read_text(encoding="utf-8") == "First page\n\nSecond page"
+
+    row = window.mid_manager.master_df.iloc[0]
+    assert row["reviewer_status"] == "ACCEPT"
+    assert row["reviewer_comments"] == "Looks right"
+    assert bool(row["_flag"]) is False
+    assert window.mid_manager.current_index == 1
+
+
+@pytest.mark.qt
+@pytest.mark.integration
+def test_reviewer_reject_also_flags_the_row(application_factory, mid_row_factory):
+    window = application_factory(
+        "Reviewer", rows=[mid_row_factory(), mid_row_factory(metric="Two")]
+    )
 
     window.reject_scrape()
-    rejected = Path(window.reject_dir) / name
-    assert rejected.read_text(encoding="utf-8") == "First page\n\nSecond page"
 
+    row = window.mid_manager.master_df.iloc[0]
+    assert row["reviewer_status"] == "REJECT"
+    assert bool(row["_flag"]) is True
+    assert window.mid_manager.current_index == 1
+
+
+@pytest.mark.qt
+@pytest.mark.integration
+def test_verdicts_are_ignored_outside_reviewer_mode(application_factory):
+    """The buttons do not exist there, so a call is a bug, not a user action."""
+    window = application_factory("User")
+
+    window.accept_scrape()
+    window.reject_scrape()
+
+    row = window.mid_manager.master_df.iloc[0]
+    assert row["reviewer_status"] == ""
+    assert bool(row["_flag"]) is False
+    assert window.mid_manager.current_index == 0
+
+
+@pytest.mark.qt
+def test_the_data_directory_holds_nothing_but_documents(application_factory):
+    """No accepted/ or rejected/ working folders are created beside the PDFs."""
+    import os
+
+    window = application_factory("User")
+    entries = os.listdir(window.settings["dataDirectory"])
+
+    assert entries == ["AGENCY_2024.pdf"]

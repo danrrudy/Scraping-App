@@ -69,7 +69,8 @@ class ControlSpec:
     label: str
     modes: tuple[str, ...] = ALL_MODES
     shortcut: str = ""
-    requires_expandable_fields: bool = False
+    #: Only built when the context says the control has something to do.
+    requires_prior_year_copy: bool = False
     #: Consecutive controls sharing a group id are laid out side by side.
     group: str = ""
 
@@ -92,16 +93,167 @@ CONTROL_SPECS = (
         "duplicate_year",
         "Copy Previous Year",
         modes=("user", "dev"),
-        requires_expandable_fields=True,
+        requires_prior_year_copy=True,
     ),
     ControlSpec("open_settings", "Settings"),
     ControlSpec("run_audit", "Run MID Audit", modes=("dev",)),
     ControlSpec("load_cases", "Load Cases", modes=("dev", "reviewer")),
-    ControlSpec("export_results", "Export Review Results", modes=("dev",)),
 )
 
 #: The restriction combo box is inserted immediately before this control.
 RESTRICTION_BEFORE_ACTION = "load_cases"
+
+
+# ----------------------------------------------------------------------
+# Field editors
+# ----------------------------------------------------------------------
+class _FieldEditor:
+    """One sidebar field, whatever widget presents it.
+
+    The sidebar reads and writes fields through this so the rest of the
+    application never has to know whether a column is typed into, picked
+    from a list, or chosen with radio buttons.
+    """
+
+    #: The widget placed in the form row.
+    widget: QWidget
+
+    def value(self) -> str:
+        raise NotImplementedError
+
+    def set_value(self, value) -> None:
+        """Present ``value`` without reporting it as an edit."""
+        raise NotImplementedError
+
+    def clear(self) -> None:
+        raise NotImplementedError
+
+    def focus(self) -> None:
+        self.widget.setFocus()
+
+    def focus_widgets(self) -> list[QWidget]:
+        """The widgets Tab should visit, in order."""
+        return [self.widget]
+
+
+class _TextFieldEditor(_FieldEditor):
+    def __init__(self, on_edited):
+        self.widget = configure_text_box(QTextEdit())
+        self.widget.setMaximumHeight(FIELD_BOX_MAX_HEIGHT)
+        self.widget.setMinimumHeight(FIELD_BOX_MIN_HEIGHT)
+        self.widget.textChanged.connect(on_edited)
+
+    def value(self) -> str:
+        return self.widget.toPlainText().strip()
+
+    def set_value(self, value) -> None:
+        self.widget.blockSignals(True)
+        self.widget.setPlainText(value or "")
+        self.widget.blockSignals(False)
+
+    def clear(self) -> None:
+        self.widget.clear()
+
+
+class _DropdownFieldEditor(_FieldEditor):
+    """A fixed list of options, with a blank entry for "not yet chosen"."""
+
+    def __init__(self, options, on_edited):
+        self.options = tuple(options)
+        self.widget = QComboBox()
+        self.widget.addItem("")
+        self.widget.addItems(list(self.options))
+        self.widget.currentTextChanged.connect(lambda _text: on_edited())
+
+    def value(self) -> str:
+        return self.widget.currentText().strip()
+
+    def set_value(self, value) -> None:
+        value = (value or "").strip()
+        self.widget.blockSignals(True)
+        index = self.widget.findText(value)
+        if index < 0:
+            # A value the options do not list, from an older configuration
+            # or a hand-edited MID: shown, and kept, rather than silently
+            # replaced with a blank on the next commit.
+            self.widget.addItem(value)
+            index = self.widget.count() - 1
+        self.widget.setCurrentIndex(index)
+        self.widget.blockSignals(False)
+
+    def clear(self) -> None:
+        self.widget.setCurrentIndex(0)
+
+
+class _RadioFieldEditor(_FieldEditor):
+    """One radio button per option, plus a way to choose none of them."""
+
+    def __init__(self, options, on_edited):
+        self.options = tuple(options)
+        self._on_edited = on_edited
+        self.widget = QWidget()
+        layout = QHBoxLayout(self.widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        self.group = QButtonGroup(self.widget)
+        self.buttons: dict[str, QRadioButton] = {}
+        for option in self.options:
+            button = QRadioButton(option)
+            # Only the radio being switched on is a change worth reporting.
+            button.toggled.connect(
+                lambda checked: on_edited() if checked else None
+            )
+            self.group.addButton(button)
+            self.buttons[option] = button
+            layout.addWidget(button)
+
+        # An exclusive group cannot be emptied by clicking, so a stored blank
+        # needs a control of its own to get back to.
+        self.clear_button = QPushButton("×")
+        self.clear_button.setFixedWidth(22)
+        self.clear_button.setToolTip("Clear the selection")
+        self.clear_button.clicked.connect(self._clear_by_user)
+        layout.addWidget(self.clear_button)
+        layout.addStretch(1)
+
+    def value(self) -> str:
+        for option, button in self.buttons.items():
+            if button.isChecked():
+                return option
+        return ""
+
+    def set_value(self, value) -> None:
+        value = (value or "").strip()
+        self.group.setExclusive(False)
+        for option, button in self.buttons.items():
+            button.blockSignals(True)
+            button.setChecked(option == value)
+            button.blockSignals(False)
+        self.group.setExclusive(True)
+
+    def clear(self) -> None:
+        self.set_value("")
+
+    def _clear_by_user(self) -> None:
+        self.clear()
+        self._on_edited()
+
+    def focus(self) -> None:
+        widgets = self.focus_widgets()
+        if widgets:
+            widgets[0].setFocus()
+
+    def focus_widgets(self) -> list[QWidget]:
+        return list(self.buttons.values())
+
+
+def _build_field_editor(spec, on_edited) -> _FieldEditor:
+    if spec.kind == "dropdown":
+        return _DropdownFieldEditor(spec.options, on_edited)
+    if spec.kind == "radio":
+        return _RadioFieldEditor(spec.options, on_edited)
+    return _TextFieldEditor(on_edited)
 
 
 class LeftSidebar(QWidget):
@@ -113,8 +265,6 @@ class LeftSidebar(QWidget):
     addLevelRequested = pyqtSignal(str)
     #: A user-defined computed button was pressed; the argument is its key.
     fieldButtonClicked = pyqtSignal(str)
-    #: The classification scheme selection changed.
-    schemeChanged = pyqtSignal(str)
     #: A checkbox changed; arguments are ``(toggle key, checked)``.
     toggleChanged = pyqtSignal(str, bool)
     #: A checkbox's numeric companion changed; ``(toggle key, value)``.
@@ -131,24 +281,19 @@ class LeftSidebar(QWidget):
 
         self.info_labels: dict[str, QLabel] = {}
         self.statistic_labels: dict[str, QLabel] = {}
-        self.field_editors: dict[str, QTextEdit] = {}
+        self.field_editors: dict[str, _FieldEditor] = {}
         self.add_level_buttons: dict[str, QPushButton] = {}
         self.field_buttons: dict[str, QPushButton] = {}
         self.control_buttons: dict[str, QPushButton] = {}
-        self.metric_status_buttons: dict[str, QRadioButton] = {}
         self.toggle_boxes: dict[str, QCheckBox] = {}
         self.counter_boxes: dict[str, QSpinBox] = {}
         self._highlight_colors: dict[str, QColor] = {}
-        self._focus_chain_ready = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addLayout(self._build_info_block())
         layout.addLayout(self._build_control_block())
 
-        self.set_scheme_options(context.evaluation_classes, context.default_class)
-
-        self._focus_chain_ready = True
         self.apply_focus_chain()
 
     # ------------------------------------------------------------------
@@ -220,12 +365,9 @@ class LeftSidebar(QWidget):
             row_layout.setContentsMargins(0, 0, 0, 0)
             row_layout.setSpacing(6)
 
-            editor = configure_text_box(QTextEdit())
-            editor.setMaximumHeight(FIELD_BOX_MAX_HEIGHT)
-            editor.setMinimumHeight(FIELD_BOX_MIN_HEIGHT)
-            editor.textChanged.connect(self.userEdited)
+            editor = _build_field_editor(spec, self.userEdited.emit)
             self.field_editors[spec.key] = editor
-            row_layout.addWidget(editor, 1)
+            row_layout.addWidget(editor.widget, 1)
 
             # Computed buttons sit beside the field they write into.
             for button_spec in self.context.buttons_for(spec.key):
@@ -243,7 +385,11 @@ class LeftSidebar(QWidget):
             if spec.expandable:
                 add_button = QPushButton("+")
                 add_button.setFixedWidth(26)
-                add_button.setToolTip(f"Add new {spec.key} row")
+                tooltip = f"Add a new row at the {spec.label} level"
+                if spec.add_shortcut:
+                    add_button.setShortcut(spec.add_shortcut)
+                    tooltip += f" ({spec.add_shortcut})"
+                add_button.setToolTip(tooltip)
                 add_button.clicked.connect(
                     lambda _checked=False, key=spec.key: self.addLevelRequested.emit(
                         key
@@ -254,44 +400,11 @@ class LeftSidebar(QWidget):
 
             form.addRow(f"{spec.label}:", row)
 
-        self._add_classification_controls(form)
         self._add_toggle_controls(form)
         self._add_notes_controls(form)
 
         group.setLayout(form)
         return group
-
-    def _add_classification_controls(self, form):
-        # Label above the combo rather than beside it. Side by side, the two
-        # together set a floor on the sidebar's width that neither needs on
-        # its own, and wrapping the label instead clips its second line.
-        scheme_container = QWidget()
-        scheme_row = QVBoxLayout(scheme_container)
-        scheme_row.setContentsMargins(0, 0, 0, 0)
-        scheme_row.setSpacing(2)
-        scheme_row.addWidget(QLabel("Classification Scheme:"))
-
-        self.scheme_combo = QComboBox()
-        scheme_row.addWidget(self.scheme_combo)
-
-        form.addRow(scheme_container)
-
-        metric_container = QWidget()
-        metric_layout = QVBoxLayout(metric_container)
-        metric_layout.setSpacing(4)
-        metric_layout.setContentsMargins(0, 0, 0, 0)
-        metric_layout.addWidget(QLabel("Metric Status:"))
-
-        self.metric_status_group = QButtonGroup(self)
-        self.metric_status_container = QWidget()
-        self.metric_status_layout = QHBoxLayout(self.metric_status_container)
-        self.metric_status_layout.setSpacing(8)
-        self.metric_status_layout.setContentsMargins(0, 0, 0, 0)
-        metric_layout.addWidget(self.metric_status_container)
-
-        form.addRow(metric_container)
-
-        self.scheme_combo.currentTextChanged.connect(self._on_scheme_combo_changed)
 
     def _add_toggle_controls(self, form):
         """Build the user-defined checkboxes, wrapping across a grid."""
@@ -364,10 +477,6 @@ class LeftSidebar(QWidget):
         notes_row.addWidget(self.reviewer_notes_edit)
         layout.addLayout(notes_row)
 
-        self.hint_label = QLabel("")
-        self.hint_label.setWordWrap(True)
-        layout.addWidget(self.hint_label)
-
         buttons = QHBoxLayout()
         for action, label in (("accept", "Accept"), ("reject", "Reject")):
             button = configure_button(QPushButton(label))
@@ -384,12 +493,11 @@ class LeftSidebar(QWidget):
 
     def _build_control_block(self):
         controls = QVBoxLayout()
-        expandable = bool(self.context.expandable_field_keys)
         open_group = None
         row = None
 
         for spec in CONTROL_SPECS:
-            if spec.requires_expandable_fields and not expandable:
+            if spec.requires_prior_year_copy and not self.context.prior_year_copy:
                 continue
             if spec.action == RESTRICTION_BEFORE_ACTION:
                 open_group, row = None, None
@@ -452,24 +560,14 @@ class LeftSidebar(QWidget):
         self.toggleChanged.emit(key, checked)
         self.userEdited.emit()
 
-    def _on_metric_status_toggled(self, checked):
-        """Only the radio being switched on is a change worth reporting."""
-        if checked:
-            self.userEdited.emit()
-
-    def _on_scheme_combo_changed(self, name):
-        self.rebuild_metric_status_options(name)
-        self.schemeChanged.emit(name)
-        self.userEdited.emit()
-
     # ------------------------------------------------------------------
     # Keyboard navigation
     # ------------------------------------------------------------------
     def focus_widgets(self) -> list[QWidget]:
         """Every sidebar input, in the order Tab should visit them."""
-        widgets: list[QWidget] = list(self.field_editors.values())
-        widgets.append(self.scheme_combo)
-        widgets.extend(self.metric_status_buttons.values())
+        widgets: list[QWidget] = []
+        for editor in self.field_editors.values():
+            widgets.extend(editor.focus_widgets())
         for key, box in self.toggle_boxes.items():
             widgets.append(box)
             if key in self.counter_boxes:
@@ -479,13 +577,7 @@ class LeftSidebar(QWidget):
         return [widget for widget in widgets if widget is not None]
 
     def apply_focus_chain(self) -> None:
-        """Make Tab / Shift+Tab walk the sidebar inputs in visual order.
-
-        Re-applied whenever the metric-status radios are rebuilt, since those
-        widgets are destroyed and recreated when the scheme changes.
-        """
-        if not self._focus_chain_ready:
-            return
+        """Make Tab / Shift+Tab walk the sidebar inputs in visual order."""
         widgets = self.focus_widgets()
         for current, following in zip(widgets, widgets[1:]):
             QWidget.setTabOrder(current, following)
@@ -495,10 +587,15 @@ class LeftSidebar(QWidget):
     # ------------------------------------------------------------------
     def field_text(self, key: str) -> str:
         editor = self.field_editors.get(key)
-        return editor.toPlainText().strip() if editor else ""
+        return editor.value() if editor else ""
 
     def field_texts(self) -> dict[str, str]:
         return {key: self.field_text(key) for key in self.field_editors}
+
+    def field_widget(self, key: str) -> QWidget | None:
+        """The widget presenting ``key``, for callers that must touch it."""
+        editor = self.field_editors.get(key)
+        return editor.widget if editor else None
 
     def notes_text(self) -> str:
         return self.notes_edit.text().strip()
@@ -520,18 +617,6 @@ class LeftSidebar(QWidget):
         box = self.counter_boxes.get(key)
         return box.value() if box else 0
 
-    def metric_status(self) -> str:
-        for key, button in self.metric_status_buttons.items():
-            if button.isChecked():
-                return key
-        return ""
-
-    def metric_status_labels(self) -> list[str]:
-        return [str(key) for key in self.metric_status_buttons]
-
-    def scheme_name(self) -> str:
-        return self.scheme_combo.currentText()
-
     def restriction_choice(self) -> str:
         return self.restriction_combo.currentText()
 
@@ -539,19 +624,23 @@ class LeftSidebar(QWidget):
         return self._highlight_colors.get(key, QColor("#FFFF00"))
 
     def transfer_targets(self) -> list[tuple[str, str]]:
-        """Fields the content panel may push text into, in display order."""
-        return [(spec.key, spec.label) for spec in self.context.fields]
+        """Fields the content panel may push text into, in display order.
+
+        Only free-text fields: a selection cannot be typed into a list.
+        """
+        return [
+            (spec.key, spec.label)
+            for spec in self.context.fields
+            if spec.kind == "text"
+        ]
 
     # ------------------------------------------------------------------
     # Presenting state
     # ------------------------------------------------------------------
     def set_field_text(self, key: str, value) -> None:
         editor = self.field_editors.get(key)
-        if editor is None:
-            return
-        editor.blockSignals(True)
-        editor.setPlainText(value or "")
-        editor.blockSignals(False)
+        if editor is not None:
+            editor.set_value(value)
 
     def set_field_texts(self, values) -> None:
         for key in self.field_editors:
@@ -564,7 +653,7 @@ class LeftSidebar(QWidget):
     def focus_field(self, key: str) -> None:
         editor = self.field_editors.get(key)
         if editor is not None:
-            editor.setFocus()
+            editor.focus()
 
     def set_notes_text(self, value) -> None:
         self._set_line_edit(self.notes_edit, value)
@@ -663,83 +752,6 @@ class LeftSidebar(QWidget):
 
     def warning_text(self) -> str:
         return self.warning_label.text()
-
-    def set_hint(self, text) -> None:
-        self.hint_label.setText(text or "")
-
-    def set_metric_status(self, value) -> None:
-        for key, button in self.metric_status_buttons.items():
-            button.blockSignals(True)
-            button.setChecked(key == value)
-            button.blockSignals(False)
-
-    def select_metric_status_by_index(self, index: int) -> None:
-        buttons = list(self.metric_status_buttons.values())
-        if 0 <= index < len(buttons):
-            buttons[index].setChecked(True)
-
-    def clear_metric_status(self) -> None:
-        """Only ever reached from the keyboard, so it counts as an edit."""
-        self.metric_status_group.setExclusive(False)
-        for button in self.metric_status_buttons.values():
-            button.setChecked(False)
-        self.metric_status_group.setExclusive(True)
-        self.userEdited.emit()
-
-    def set_scheme(self, name: str) -> None:
-        self.scheme_combo.blockSignals(True)
-        self.scheme_combo.setCurrentText(name)
-        self.scheme_combo.blockSignals(False)
-        self.rebuild_metric_status_options(name)
-
-    def set_scheme_options(self, classes, default_name: str = "") -> None:
-        """Repopulate the scheme combo from ``{name: {"option_types": [...]}}``."""
-        self.context.evaluation_classes = classes or {}
-        self.context.default_class = default_name or ""
-        names = list(self.context.evaluation_classes)
-
-        self.scheme_combo.blockSignals(True)
-        self.scheme_combo.clear()
-        self.scheme_combo.addItems(names)
-        self.scheme_combo.blockSignals(False)
-
-        if default_name in names:
-            self.scheme_combo.setCurrentText(default_name)
-            self.rebuild_metric_status_options(default_name)
-        elif names:
-            self.scheme_combo.setCurrentIndex(0)
-            self.rebuild_metric_status_options(names[0])
-        else:
-            self.rebuild_metric_status_options(None)
-
-    def rebuild_metric_status_options(self, scheme_name) -> None:
-        for button in self.metric_status_buttons.values():
-            self.metric_status_group.removeButton(button)
-            button.setParent(None)
-            button.deleteLater()
-        self.metric_status_buttons = {}
-
-        while self.metric_status_layout.count():
-            item = self.metric_status_layout.takeAt(0)
-            widget = item.widget()
-            if widget:
-                widget.setParent(None)
-                widget.deleteLater()
-
-        classes = self.context.evaluation_classes or {}
-        options = []
-        if scheme_name and scheme_name in classes:
-            options = classes[scheme_name].get("option_types", []) or []
-
-        for option in options:
-            button = QRadioButton(str(option))
-            button.toggled.connect(self._on_metric_status_toggled)
-            self.metric_status_group.addButton(button)
-            self.metric_status_buttons[str(option)] = button
-            self.metric_status_layout.addWidget(button)
-
-        self.metric_status_layout.addStretch(1)
-        self.apply_focus_chain()
 
     def set_restriction_options(self, options) -> None:
         self.restriction_combo.blockSignals(True)

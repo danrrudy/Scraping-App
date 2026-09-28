@@ -5,6 +5,7 @@ from copy import deepcopy
 
 import paths
 from mid_schema import DEFAULT_MID_SCHEMA
+from version import __version__
 
 # The sidebar checkboxes are user-defined. Each entry needs only a MID column;
 # everything else is derived or optional:
@@ -16,31 +17,15 @@ from mid_schema import DEFAULT_MID_SCHEMA
 #   message  status-bar text shown when it is toggled
 #   counter  an optional numeric companion, enabled only while the box is
 #            ticked: {"column", "label", "minimum", "maximum"}
+#
+# Only the flag is built in: reviewer rejection sets it and the "_flag"
+# restriction reads it. Everything else is a project's own business.
 DEFAULT_CHECKBOXES = [
     {
         "column": "_flag",
         "label": "Flag for review",
         "shortcut": "Ctrl+F",
         "message": "Flagged for review.",
-    },
-    {
-        "column": "_aggregate",
-        "label": "Aggregate",
-        "message": "Flagged as Aggregate",
-    },
-    {
-        "column": "_achieved",
-        "label": "Achieved",
-        "message": "Toggled achieved status",
-    },
-    {
-        "column": "_future_dated",
-        "label": "Future-Dated",
-        "counter": {
-            "column": "years_to_evaluation",
-            "label": "Years to eval:",
-            "maximum": 20,
-        },
     },
 ]
 
@@ -226,7 +211,14 @@ def checkbox_columns(definitions):
 
 # Default application settings
 # Options defined in settings_window.py
+#: The settings key stamped with the version that last wrote the file. Read
+#: back at start-up: a file written by a different version may describe
+#: things this one no longer understands, and the user is asked before the
+#: program carries on with it. See :func:`settings_version_mismatch`.
+VERSION_KEY = "settingsVersion"
+
 default_settings = {
+    VERSION_KEY: __version__,
     "fontSize": "12",  # Font size for display
     "MIDLocation": "",  # File location of the MID
     "MIDSheetName": "",  # Sheet name within the MID to use
@@ -243,8 +235,6 @@ default_settings = {
     "defaultExtractor": "",
     "extractionTools": {},
     "extractionToolDirectory": paths.in_app_dir("extractors"),
-    "evaluationClasses": {},
-    "defaultClass": "",
     "UIScale": "1.0",
     "midSchema": deepcopy(DEFAULT_MID_SCHEMA),
     "checkboxes": deepcopy(DEFAULT_CHECKBOXES),
@@ -294,6 +284,10 @@ def load_settings(path=SETTINGS_PATH):
             # Merge defaults with user settings (preserve fallback values)
             merged = deepcopy(default_settings)
             merged.update(filtered_settings)
+            # The version is what the *file* says, never the default: a file
+            # from before the stamp existed must read as an older version,
+            # not silently as this one.
+            merged[VERSION_KEY] = str(user_settings.get(VERSION_KEY, "") or "")
 
             # Confirm that Logging directory exists or create
             log_dir = merged.get("logFileDirectory")
@@ -351,9 +345,30 @@ def migrate_settings(settings) -> bool:
     return changed
 
 
+def settings_version_mismatch(settings):
+    """``(stored version, this version)`` when they differ, else ``None``.
+
+    A settings file with no stamp at all was written before versions were
+    recorded, which is reported as ``"an earlier version"``.
+    """
+    stored = str((settings or {}).get(VERSION_KEY, "") or "").strip()
+    if stored == __version__:
+        return None
+    return (stored or "an earlier version", __version__)
+
+
+def stamp_settings_version(settings) -> bool:
+    """Mark ``settings`` as belonging to this version. Returns whether it changed."""
+    if settings.get(VERSION_KEY) == __version__:
+        return False
+    settings[VERSION_KEY] = __version__
+    return True
+
+
 def save_settings(settings, path=SETTINGS_PATH):
-    """Save settings to file."""
+    """Save settings to file, stamped with the version writing it."""
     try:
+        stamp_settings_version(settings)
         with open(path, "w", encoding="utf-8") as f:
             json.dump(settings, f, indent=2)
     except Exception as e:

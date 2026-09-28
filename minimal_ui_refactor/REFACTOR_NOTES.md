@@ -644,11 +644,64 @@ with "Select at least one MID column to interact with". Selection now follows
 `build_schema`, so the dialog can be tested without a dialog that was never
 shown having to close itself.
 
-## Suggested next step
+# Vestigial elements removed (September 2026)
 
-`load_audit_failures` and `restrict_for_reviewer` are still near-identical
-~110-line copies of each other. Both build a boolean mask over the MID and hand
-the matching positions to `restrict_to_rows`; the only real difference is which
-test names they accept. `restrict_to_live_selection` shows the shape the merged
-version should take. That is the next cohesive behaviour to extract, into a
-MID-restriction module.
+The application began life reading one particular spreadsheet — agency, year,
+a four-level `stratobj → obj → goal → metric` hierarchy, a metric status with
+target and actual values — and the generic schema was layered over that. This
+pass removed what was left of the original vocabulary and made the last of the
+hard-wired behaviour configurable.
+
+## Gone
+
+- `LEGACY_HIERARCHY_COLUMNS`, `LEGACY_SOURCE_COLUMNS`, `MIDSchema.legacy()`,
+  `is_legacy_hierarchy_compatible`, `EXPECTED_COLUMNS`, `COLUMN_TYPES`,
+  `LEVELS`, and the `-`→`_` filename fallback. The default schema now names
+  only `Filename`, which is what *Generate Empty MID…* writes.
+- The metric workflow: `metric_status`, `classification_scheme`, `target`,
+  `actual`, `_no_metrics`, `_achieved`, `_future_dated`,
+  `years_to_evaluation` were forced into every MID by
+  `WORKFLOW_COLUMN_DEFAULTS`. The classification scheme combo, the status
+  radios, `Ctrl+1`–`Ctrl+9` / `0`, `ClassDialog`, the `evaluationClasses`
+  and `defaultClass` settings, the `no_status` / `no_t/a` restrictions, and
+  the status-label stripping on transfer all went with it.
+- The hierarchy helpers only tests called (`find_parent_for_*`,
+  `propagate_flag_from_index`, `next_seed_row_index`) and the hard-coded
+  `F1`–`F4` bindings.
+- User- and dev-mode Accept/Reject. The buttons only ever existed in
+  Reviewer mode, so the `accepted/` and `rejected/` folders, the dev-mode
+  `manual_review` record and *Export Review Results* were unreachable.
+- The two ~110-line restriction functions, merged into
+  `apply_restriction` / `_restriction_positions`. Dev mode still offers the
+  audit checks and Reviewer mode still offers `_gen` and `rejected`; the
+  dev-mode `rejected` branch that read `df["reviewer_status "]` (trailing
+  space) is no more.
+- Leftover attributes (`edit_path`, `expansion_state`, `mid_df`,
+  `cells_by_page`, `page_dims`), unused imports, and `image_utils.py`.
+  `current_mid_index` is kept for now; note that it is only ever 0.
+
+## Kept, made configurable
+
+**Fields** (`mid_schema.FieldConfig`, *Configure Fields*). A field carries a
+`kind` — `text`, `dropdown` or `radio` — with an options list for the last
+two, so the old status radios can be recreated for any column. A field
+marked `hierarchy` is one level of a nested structure, ordered as listed;
+`clone_for_child` clears that level and the ones beneath using
+`MIDSchema.hierarchy_below`, and the `+` button's shortcut is the field's
+own `addShortcut`. Hierarchy columns are part of `uniqueness_columns`, which
+is what lets one document carry several rows without a duplicate warning.
+`interactionColumns` in an older settings file still loads.
+
+`duplicate_prior_year` is generalised to the configured X/Y and hierarchy
+fields and now really does replace the template row (the old version kept
+it, as a strict xfail recorded). The control appears only when
+`MIDSchema.supports_prior_year_copy`.
+
+**Page numbers.** `Page` is the one column the application types: `coerce_page`
+makes it an `int` or blank on load and on every write, since it is compared
+with page indices.
+
+**Settings versions.** `save_settings` stamps `settingsVersion`;
+`main.confirm_settings_version` compares it with `version.__version__` at
+start-up, asks before continuing with a file from another version, and
+re-stamps on Yes so the question is asked once per upgrade.

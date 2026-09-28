@@ -45,7 +45,6 @@ ACTION_HANDLERS = {
     "open_settings": "open_settings",
     "run_audit": "run_mid_audit",
     "load_cases": "handle_load_failures",
-    "export_results": "export_review_results",
     "accept": "accept_scrape",
     "reject": "reject_scrape",
     # Menu-only actions. They are declared here too so every UI action
@@ -66,8 +65,6 @@ SIDEBAR_MINIMUM_WIDTH = 180
 #: Single-key transfer shortcuts, in order. How many are bound is the
 #: content panel's decision, not the window's.
 FIELD_TRANSFER_KEYS = ("1", "2", "3", "4", "5", "6", "7", "8", "9")
-#: Function keys that add a new row at an expandable field's level.
-ADD_LEVEL_KEYS = ("F1", "F2", "F3", "F4")
 
 #: Declared controls with no controller method would be silently dead buttons.
 UNMAPPED_CONTROLS = tuple(
@@ -203,7 +200,6 @@ class MainWindowUI(QObject):
         self._connect_if_present(
             self.left.fieldButtonClicked, "on_field_button_clicked"
         )
-        self._connect_if_present(self.left.schemeChanged, "on_scheme_changed")
         self._connect_if_present(self.left.toggleChanged, "on_toggle_changed")
         self._connect_if_present(self.left.counterChanged, "on_counter_changed")
         self._connect_if_present(self.left.userEdited, "on_entry_edited_by_user")
@@ -327,14 +323,6 @@ class MainWindowUI(QObject):
         self._shortcuts = []
         self._reserved_plain_keys = set()
 
-        # Metric status radios: Ctrl+1..Ctrl+9 select, 0 clears.
-        for index in range(9):
-            self._bind(
-                f"Ctrl+{index + 1}",
-                lambda position=index: self.left.select_metric_status_by_index(position),
-            )
-        self._bind("0", self.left.clear_metric_status)
-
         # Page and entry navigation.
         self._bind("-", lambda: self._dispatch_action("previous_page"))
         self._bind("=", lambda: self._dispatch_action("next_page"))
@@ -343,16 +331,11 @@ class MainWindowUI(QObject):
 
         # Pull the content panel's selection into a sidebar field, if the
         # active panel offers that at all.
-        for key, field_key in zip(
-            self._transfer_keys(), self.context.field_keys
-        ):
+        # Only free-text fields can take a selection, so the keys skip the
+        # list-backed ones and count along the fields that can.
+        transferable = [key for key, _label in self.left.transfer_targets()]
+        for key, field_key in zip(self._transfer_keys(), transferable):
             self._bind(key, lambda target=field_key: self.transfer_selection(target))
-
-        # Expand the hierarchy at a given level.
-        for key, field_key in zip(
-            ADD_LEVEL_KEYS, self.context.expandable_field_keys
-        ):
-            self._bind(key, lambda target=field_key: self.left.trigger_add_level(target))
 
     def _transfer_keys(self) -> tuple[str, ...]:
         """The number keys the active panel wants bound to field transfer."""
@@ -526,15 +509,6 @@ class MainWindowUI(QObject):
     def focus_widgets(self) -> list:
         return self.left.focus_widgets()
 
-    def metric_status(self) -> str:
-        return self.left.metric_status()
-
-    def metric_status_labels(self) -> list[str]:
-        return self.left.metric_status_labels()
-
-    def scheme_name(self) -> str:
-        return self.left.scheme_name()
-
     def restriction_choice(self) -> str:
         return self.left.restriction_choice()
 
@@ -616,20 +590,6 @@ class MainWindowUI(QObject):
 
     def warning_text(self) -> str:
         return self.left.warning_text()
-
-    def set_hint(self, text) -> None:
-        self.left.set_hint(text)
-
-    def set_metric_status(self, value) -> None:
-        self.left.set_metric_status(value)
-        self._note_row_edit()
-
-    def set_scheme(self, name: str) -> None:
-        self.left.set_scheme(name)
-        self._note_row_edit()
-
-    def set_scheme_options(self, classes, default_name: str = "") -> None:
-        self.left.set_scheme_options(classes, default_name)
 
     def set_restriction_options(self, options) -> None:
         self.left.set_restriction_options(options)

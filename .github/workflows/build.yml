@@ -45,21 +45,11 @@ jobs:
             libegl1 libgl1 libglib2.0-0 libdbus-1-3 \
             libxkbcommon0 libxkbcommon-x11-0 libfontconfig1
 
-      # The four deselected tests fail on main and are unrelated to packaging:
-      # two concern the audit report's shape, and two are strict-xfail
-      # MIDManager expectations that now pass and so report as XPASS. Listing
-      # them explicitly keeps this job a real gate — any *other* failure still
-      # stops the build — rather than ignoring the exit code wholesale. Delete
-      # a line here as each one is fixed.
+      # A real gate: any failure stops the build before anything is packaged.
       - name: Run tests
         env:
           QT_QPA_PLATFORM: offscreen
-        run: |
-          python -m pytest -q \
-            --deselect tests/test_audit_runner.py::test_audit_writes_detailed_and_summary_reports \
-            --deselect tests/test_audit_runner.py::test_audit_records_missing_pdf_as_fatal_failure \
-            --deselect tests/test_mid_manager.py::test_direct_navigation_can_select_first_row \
-            --deselect tests/test_mid_manager.py::test_propagated_flag_is_persistent_in_master_dataframe
+        run: python -m pytest -q
 
   build:
     needs: test

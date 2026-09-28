@@ -15,11 +15,17 @@ arrive here. A packaged build has this module as its entry point.
 import sys
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication, QMessageBox
 
 import paths
 import starter_plugins
-from app_settings import load_settings, migrate_settings, save_settings
+from app_settings import (
+    load_settings,
+    migrate_settings,
+    save_settings,
+    settings_version_mismatch,
+    stamp_settings_version,
+)
 from logger import setup_logger
 from version import APP_NAME, APP_SLUG, __version__
 
@@ -39,13 +45,56 @@ def build_application(argv):
     return application
 
 
+def confirm_settings_version(settings, logger, ask=None) -> bool:
+    """Warn when the settings file came from another version. Returns whether to go on.
+
+    A file written by a different release may configure things this one
+    reads differently, so the user is told and asked before the program
+    carries on with it. Going ahead re-stamps the file, so the question is
+    asked once per upgrade rather than at every start. ``ask`` is the
+    question function, replaceable for tests.
+    """
+    mismatch = settings_version_mismatch(settings)
+    if mismatch is None:
+        return True
+    stored, current = mismatch
+    logger.warning(f"Settings file was written by {stored}; this is {current}")
+
+    ask = ask or QMessageBox.question
+    choice = ask(
+        None,
+        "Settings From Another Version",
+        f"The settings file was last saved by {stored} of {APP_NAME}, and "
+        f"this is version {current}.\n\n"
+        "Settings that changed between versions may be read differently or "
+        "ignored. Check them under Settings after opening.\n\n"
+        "Continue with these settings?",
+        QMessageBox.Yes | QMessageBox.No,
+        QMessageBox.Yes,
+    )
+    if choice != QMessageBox.Yes:
+        logger.info("User declined to continue with settings from another version")
+        return False
+
+    stamp_settings_version(settings)
+    save_settings(settings)
+    logger.info(f"Settings file re-stamped as version {current}")
+    return True
+
+
 def prepare_installation():
-    """First-run housekeeping, and a log line saying where files are going."""
+    """First-run housekeeping, and a log line saying where files are going.
+
+    Returns ``None`` when the program should not go on: the user was shown
+    that the settings came from another version and chose to stop.
+    """
     logger = setup_logger()
     logger.info(f"{APP_NAME} {__version__} starting")
     logger.info(paths.location_note())
 
     settings = load_settings()
+    if not confirm_settings_version(settings, logger):
+        return None
     # Before anything reads module settings: resolving a module drops keys it
     # no longer declares, so a renamed setting has to be carried across while
     # the old key is still in the file.
@@ -67,7 +116,8 @@ def main(argv=None):
 
     configure_qt()
     application = build_application(argv)
-    prepare_installation()
+    if prepare_installation() is None:
+        return 0
 
     # Imported after the settings and plugin folders are in place, and after
     # QApplication exists: constructing the window puts dialogs on screen.

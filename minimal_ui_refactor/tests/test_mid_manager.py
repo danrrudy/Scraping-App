@@ -1,22 +1,47 @@
-import pandas as pd
 import pytest
 
 
-def test_valid_mid_loads_and_casts_known_column_types(manager_factory, mid_row_factory):
-    manager = manager_factory(
-        [mid_row_factory(year="2024", Format_Type="19", _flag="True")]
-    )
+def test_source_values_are_read_as_text(manager_factory, mid_row_factory):
+    """The application does not know what a project's columns mean."""
+    manager = manager_factory([mid_row_factory(year="2024", Format_Type="19")])
 
-    assert int(manager.df.at[0, "year"]) == 2024
-    assert int(manager.df.at[0, "Format_Type"]) == 19
-    assert bool(manager.df.at[0, "_flag"]) is True
+    assert manager.df.at[0, "year"] == "2024"
+    assert manager.df.at[0, "Format_Type"] == "19"
     assert manager.view_indices == [0]
+
+
+def test_workflow_booleans_are_read_as_booleans(manager_factory, mid_row_factory):
+    manager = manager_factory([mid_row_factory(_flag="True", _gen="yes")])
+
+    assert bool(manager.df.at[0, "_flag"]) is True
+    assert bool(manager.df.at[0, "_gen"]) is True
+
+
+@pytest.mark.parametrize(
+    ("stored", "expected"),
+    [("3", 3), (3, 3), ("3.0", 3), ("", ""), ("p.3", ""), ("0", ""), (None, "")],
+)
+def test_the_page_column_is_always_an_int_or_blank(
+    manager_factory, mid_row_factory, stored, expected
+):
+    """The page is compared with page indices, so it is typed on the way in."""
+    manager = manager_factory([mid_row_factory(Page=stored)])
+
+    assert manager.df.at[0, "Page"] == expected
+
+
+def test_a_page_written_from_the_app_is_typed_too(manager_factory, mid_row_factory):
+    manager = manager_factory([mid_row_factory(Page="")])
+
+    manager.set_value(0, "Page", "7")
+
+    assert manager.master_df.at[0, "Page"] == 7
 
 
 def test_missing_anchor_column_is_rejected(manager_factory, mid_row_factory):
     """The column naming each row's document is the one hard requirement."""
     row = mid_row_factory()
-    row.pop("agency_yr")
+    row.pop("Filename")
 
     with pytest.raises(ValueError, match="missing required column"):
         manager_factory([row])
@@ -66,10 +91,6 @@ def test_navigation_can_move_past_each_boundary(manager_factory, mid_row_factory
     assert manager.get_current_row() is None
 
 
-@pytest.mark.xfail(
-    reason="MIDManager.select_mid_entry currently rejects the valid zero-based index 0",
-    strict=True,
-)
 def test_direct_navigation_can_select_first_row(manager_factory):
     manager = manager_factory()
     manager.current_index = 2
@@ -136,7 +157,10 @@ def test_set_value_changes_only_the_targeted_master_row(manager_factory):
     assert manager.master_df.at[0, "notes"] == ""
 
 
-def test_group_bounds_find_contiguous_agency_year_block(manager_factory):
+# ----------------------------------------------------------------------
+# Hierarchy
+# ----------------------------------------------------------------------
+def test_group_bounds_find_contiguous_xy_block(manager_factory):
     manager = manager_factory()
 
     assert manager.group_bounds(0) == (0, 1)
@@ -144,9 +168,9 @@ def test_group_bounds_find_contiguous_agency_year_block(manager_factory):
     assert manager.group_bounds(2) == (2, 2)
 
 
-@pytest.mark.current_schema
 def test_clone_for_child_preserves_parents_and_clears_descendants(manager_factory):
     manager = manager_factory()
+    manager.set_entry_edited(True, 0)
 
     child = manager.clone_for_child(0, "goal")
 
@@ -154,31 +178,21 @@ def test_clone_for_child_preserves_parents_and_clears_descendants(manager_factor
     assert child["obj"] == "Objective"
     assert child["goal"] == ""
     assert child["metric"] == ""
-    assert child["metric_status"] == ""
     assert bool(child["_gen"]) is True
+    assert bool(child["_edited"]) is False
 
 
-@pytest.mark.current_schema
-def test_parent_lookup_respects_current_hierarchy(manager_factory, mid_row_factory):
-    rows = [
-        mid_row_factory(obj="", goal="", metric=""),
-        mid_row_factory(goal="", metric=""),
-        mid_row_factory(metric="Metric A"),
-    ]
-    manager = manager_factory(rows)
+def test_clone_for_child_only_knows_the_configured_levels(manager_factory):
+    manager = manager_factory()
 
-    assert manager.find_parent_for_obj(2) == 0
-    assert manager.find_parent_for_goal(2) == 1
+    with pytest.raises(ValueError, match="not a hierarchy field"):
+        manager.clone_for_child(0, "notes")
 
 
-@pytest.mark.current_schema
-@pytest.mark.xfail(
-    reason="Flag propagation currently updates only the view DataFrame, not master_df",
-    strict=True,
-)
-def test_propagated_flag_is_persistent_in_master_dataframe(
+def test_hierarchy_rows_sharing_a_document_are_not_duplicates(
     manager_factory, mid_row_factory
 ):
+    """One document, one X/Y, several levels: the levels tell them apart."""
     rows = [
         mid_row_factory(obj="", goal="", metric=""),
         mid_row_factory(goal="", metric=""),
@@ -186,23 +200,21 @@ def test_propagated_flag_is_persistent_in_master_dataframe(
     ]
     manager = manager_factory(rows)
 
-    manager.propagate_flag_from_index(0, True)
-
-    assert manager.df["_flag"].tolist() == [True, True, True]
-    assert manager.master_df["_flag"].tolist() == [True, True, True]
+    assert manager.duplicate_observation_positions() == []
 
 
-@pytest.mark.current_schema
-@pytest.mark.xfail(
-    reason="duplicate_prior_year currently retains the template row it claims to replace",
-    strict=True,
-)
+def test_two_identical_hierarchy_rows_are_duplicates(manager_factory, mid_row_factory):
+    manager = manager_factory([mid_row_factory(), mid_row_factory()])
+
+    assert manager.duplicate_observation_positions() == [0, 1]
+
+
 def test_duplicate_prior_year_replaces_current_block(manager_factory, mid_row_factory):
     rows = [
         mid_row_factory(metric="Prior metric A"),
-        mid_row_factory(metric="Prior metric B"),
+        mid_row_factory(metric="Prior metric B", _flag=True),
         mid_row_factory(
-            agency_yr="AGENCY-2025",
+            Filename="AGENCY_2025",
             year=2025,
             stratobj="",
             obj="",
@@ -214,20 +226,49 @@ def test_duplicate_prior_year_replaces_current_block(manager_factory, mid_row_fa
     manager.current_index = 2
 
     created = manager.duplicate_prior_year()
-    current_rows = manager.master_df[manager.master_df["agency_yr"] == "AGENCY-2025"]
+    current_rows = manager.master_df[manager.master_df["year"] == "2025"]
 
     assert created == 2
+    assert len(manager.master_df) == 4
     assert current_rows["metric"].tolist() == ["Prior metric A", "Prior metric B"]
+    # Everything but the hierarchy comes from the current block's row.
+    assert current_rows["Filename"].tolist() == ["AGENCY_2025", "AGENCY_2025"]
     assert current_rows["_gen"].tolist() == [True, True]
+    assert current_rows["_flag"].tolist() == [False, False]
+    assert manager.view_indices == [0, 1, 2, 3]
+    assert manager.current_index == 2
+    assert manager.is_modified()
 
 
-@pytest.mark.current_schema
 def test_duplicate_prior_year_requires_a_prior_year(manager_factory, mid_row_factory):
-    manager = manager_factory(
-        [mid_row_factory(agency_yr="AGENCY-2025", year=2025)]
-    )
+    manager = manager_factory([mid_row_factory(Filename="AGENCY_2025", year=2025)])
 
     with pytest.raises(ValueError, match="No prior-year rows"):
+        manager.duplicate_prior_year()
+
+
+def test_duplicate_prior_year_needs_a_numeric_y(manager_factory, mid_row_factory):
+    manager = manager_factory([mid_row_factory(year="FY24")])
+
+    with pytest.raises(ValueError, match="not a whole number"):
+        manager.duplicate_prior_year()
+
+
+def test_duplicate_prior_year_needs_a_hierarchy(mid_path_factory, mid_row_factory):
+    from mid_manager import MIDManager
+    from mid_schema import MIDSchema
+
+    flat = MIDSchema.from_mapping(
+        {
+            "xColumn": "agency",
+            "yColumn": "year",
+            "documentColumn": "Filename",
+            "fields": ["metric"],
+        }
+    )
+    manager = MIDManager(mid_path_factory([mid_row_factory()]), schema=flat)
+
+    with pytest.raises(ValueError, match="hierarchy field"):
         manager.duplicate_prior_year()
 
 
@@ -237,41 +278,39 @@ def test_duplicate_prior_year_requires_a_prior_year(manager_factory, mid_row_fac
 def test_a_number_can_be_written_into_a_column_read_as_text(
     manager_factory, mid_row_factory
 ):
-    """The page number is an int landing in a column that was created empty.
+    """A counter column is created empty and typed as text until a number lands.
 
     pandas 3 types such a column as ``str`` and refuses a non-string scalar,
-    where pandas 2 silently widened it. Every page turn and every field commit
-    goes through this path, so the application has to widen it itself.
+    where pandas 2 silently widened it. The application has to widen it
+    itself.
     """
-    manager = manager_factory([mid_row_factory(Page="")])
+    manager = manager_factory([mid_row_factory(years="")])
 
-    manager.set_value(0, "Page", 4)
+    manager.set_value(0, "years", 4)
 
-    assert str(manager.df.at[0, "Page"]) == "4"
-    assert str(manager.master_df.at[0, "Page"]) == "4"
+    assert str(manager.df.at[0, "years"]) == "4"
+    assert str(manager.master_df.at[0, "years"]) == "4"
 
 
 def test_writing_a_number_leaves_the_other_rows_alone(
     manager_factory, mid_row_factory
 ):
     """Widening a column must not disturb what the rest of it already holds."""
-    manager = manager_factory(
-        [mid_row_factory(Page=""), mid_row_factory(Page="7")]
-    )
+    manager = manager_factory([mid_row_factory(years=""), mid_row_factory(years="7")])
 
-    manager.set_value(0, "Page", 4)
+    manager.set_value(0, "years", 4)
 
-    assert str(manager.df.at[1, "Page"]) == "7"
+    assert str(manager.df.at[1, "years"]) == "7"
 
 
 def test_a_boolean_can_be_written_into_a_column_read_as_text(
     manager_factory, mid_row_factory
 ):
-    manager = manager_factory([mid_row_factory(_flag="")])
+    manager = manager_factory([mid_row_factory(_verified="")])
 
-    manager.set_value(0, "_flag", True)
+    manager.set_value(0, "_verified", True)
 
-    assert bool(manager.df.at[0, "_flag"]) is True
+    assert bool(manager.df.at[0, "_verified"]) is True
 
 
 def test_the_edited_flag_can_be_set_on_a_column_read_as_text(

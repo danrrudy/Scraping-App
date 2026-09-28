@@ -128,7 +128,9 @@ Still in Settings, press **Configure MID Columns**.
 | Format code | Optional. An integer choosing which scraper to use. |
 | Search keyword | Optional. Used by the audit only. |
 | Entry label | How each row is named on screen and in the logs. |
-| **Editable MID columns** | The fields that appear in the left sidebar. |
+
+A fresh installation expects only a `Filename` column, which is what
+**Generate Empty MID…** writes. Everything else here is optional.
 
 X and Y are optional, and *may themselves be editable fields* — that is how you
 assign identifiers while reading a document rather than knowing them in
@@ -146,7 +148,14 @@ dialog previews your choice against the columns you selected. A blank
 identifier is dropped rather than leaving a stray separator, and a row with no
 identifiers at all falls back to its filename.
 
-### 5. Add a scraper
+### 5. Add the fields
+
+Press **Configure Fields** to say which columns you will fill in. Each field
+is one MID column, shown in the left sidebar in the order listed; a column the
+sheet lacks is created on load. See [Fields](#fields--configure-fields) below
+for lists, radio buttons, and nested hierarchies.
+
+### 6. Add a scraper
 
 The application does not read PDFs by itself; a scraper is a small Python file
 that does it. A first run installs `text_scraper.py` into `scrapers/` and makes
@@ -159,9 +168,9 @@ default.
 If you ever see *"No scraper found for format type -1"* in the log and an empty
 content panel, no scraper is registered: — the pages still display, but nothing is extracted.
 
-### 6. Restart
+### 7. Restart
 
-Changing the MID columns, checkboxes, or field buttons rebuilds the sidebar,
+Changing the MID columns, fields, checkboxes, or field buttons rebuilds the sidebar,
 which happens at startup. Settings will tell you a restart is needed; press
 **Restart** at the top of the control panel. It reopens on the same row.
 
@@ -173,8 +182,8 @@ which happens at startup. Settings will tell you a restart is needed; press
 
 - **Information**: which entry you are on, the document, which observation
   within that document, the current page.
-- **Fields**: one box per editable column, plus the classification scheme,
-  status options, checkboxes, and notes.
+- **Fields**: one editor per configured column — a text box, a dropdown, or a
+  row of radio buttons — plus the checkboxes and notes.
 - **Controls**: navigation, settings, and the mode-specific tools.
 
 An amber banner appears here when something needs attention — for example when
@@ -210,12 +219,37 @@ Everything below lives in Settings and is stored in `user_settings.json`.
 `User`, `Dev`, and `Reviewer` show different controls.
 
 - **User** — the fields, navigation, add/delete rows.
-- **Dev** — adds the MID audit, row restrictions, and result export.
+- **Dev** — adds the MID audit and audit-based row restrictions.
 - **Reviewer** — adds Accept/Reject and reviewer notes; hides row editing.
+
+### Fields — *Configure Fields*
+
+Each field edits one MID column. Only the column is required:
+
+```json
+{"column": "status", "label": "Status", "kind": "radio",
+ "options": ["Met", "Not Met", "Partially Met"]}
+```
+
+- **Edited as** — `text` (a box you type or transfer into), `dropdown`, or
+  `radio`. The last two take an options list and cannot receive a
+  transferred selection; the number keys skip them.
+- **Hierarchy level** — marks the field as one level of a nested structure,
+  ordered the way the fields are listed (say *objective → goal → metric*). It
+  gets a **+** button that adds a new row beneath the current one, keeping the
+  levels above and clearing this one and those beneath, so you only fill in
+  what is new. Give the button a **shortcut** (`F2`, `Ctrl+G`, …) if you use it
+  a lot.
+
+When both X and Y are configured and at least one field is a hierarchy level,
+**Copy Previous Year** appears: it rebuilds the current X/Y block from the
+rows with the same X and a Y one less, copying their hierarchy fields.
 
 ### Checkboxes — *Configure Checkboxes*
 
-Each checkbox writes true/false to a MID column. Only the column is required:
+Each checkbox writes true/false to a MID column. Only the column is required.
+The only one built in is **Flag for review** (`_flag`, `Ctrl+F`); the rest are
+yours to define:
 
 ```json
 {"column": "_verified", "label": "Verified", "shortcut": "Ctrl+V",
@@ -304,10 +338,14 @@ before are kept in the file even while they are not loaded.
 > Turning off **number-key transfer** frees the digit keys, which is what you
 > want if your fields hold numbers you need to type.
 
-### Classification schemes — *Modify Classes*
+### Settings from another version
 
-A named set of status options (for example `Met`, `Not Met`, `Partially Met`)
-shown as radio buttons. Select one with `Ctrl+1`…`Ctrl+9`, clear with `0`.
+`user_settings.json` is stamped with the version that wrote it. When a newer
+(or older) build opens a file from a different version it says so and asks
+whether to continue. Continuing re-stamps the file, so you are asked once per
+upgrade; declining closes the program without touching anything. Settings a
+version no longer knows are ignored with a console warning rather than
+breaking start-up.
 
 ---
 
@@ -336,8 +374,8 @@ through in more than one sitting.
 *Navigating past a row does not count as editing it.* The sidebar is committed
 on every move, but nothing is written unless you changed something and that
 change differs from what the row already holds. Typing, ticking a checkbox,
-choosing a status, pressing a field button, and turning to a different page all
-count; simply looking at a row does not.
+picking a list option, pressing a field button, and turning to a different page
+all count; simply looking at a row does not.
 
 The first time a change to a row is saved, that row is marked **edited** in an
 `_edited` column. It is written out with the rest of the MID, so reopening a
@@ -366,9 +404,13 @@ Cases**:
 | `same_document` | every row about the file you are on |
 | `duplicate_observation` | rows sharing a document and identifiers with another row |
 | `_flag` | rows flagged for review |
-| `no_status` / `no_t/a` | rows missing a status, or missing target and actual |
-| a test name | rows failing that test in the last audit |
+| `_gen` | rows the application added (Reviewer) |
+| `rejected` | rows a reviewer rejected (Reviewer) |
+| a test name | rows failing that test in the last audit (Dev) |
 | `none` | clears the restriction |
+
+In Reviewer mode, **Accept** and **Reject** record a verdict in
+`reviewer_status` and move to the next row; rejecting also flags the row.
 
 **Run MID Audit** checks every row — is the PDF there, do the pages parse, did
 text come out, do the field values actually appear in the document — and writes
@@ -386,14 +428,12 @@ a report to the log directory.
 | `Ctrl+←` / `Ctrl+→` | Previous / next MID entry |
 | `Ctrl+Enter` | Next MID entry |
 | `Ctrl+O` | Jump to a MID entry |
-| `Ctrl+1` – `Ctrl+9` | Select the *n*th status option |
-| `0` | Clear the status selection |
 | `Ctrl+F` | Flag for review (a checkbox's own shortcut) |
 | `Ctrl+N` | Add an observation from this document |
 | `Ctrl+S` | Save the MID |
 | `Ctrl+U` | Go to the first unedited entry |
 | `Ctrl+R` | Restart |
-| `F1` – `F4` | Add a row at that hierarchy level (legacy schemas only) |
+| *as configured* | Add a row at a hierarchy level (a field's own **+** shortcut) |
 
 ---
 
@@ -439,18 +479,14 @@ Extractors — a second, later-stage plugin — work the same way through
 
 ```
 your-data-directory/
-├── <your PDFs>
-├── accepted/           text from accepted scrapes
-│   └── formatted/
-└── rejected/           text from rejected scrapes
+└── <your PDFs>
 
 logs/                   application logs and audit reports
-user_settings.json      all configuration
+user_settings.json      all configuration, stamped with the version that wrote it
 ```
 
-These directories are created on first run. Exported text is named after the
-document and identifiers — `annual-report-2024__DOJ__2024_full.txt` — so
-several observations from one file do not overwrite each other.
+The data directory holds nothing but your documents; the application writes
+its results into the MID you save, not beside the PDFs.
 
 ---
 
@@ -466,8 +502,8 @@ The row number in the message is the spreadsheet row.
 matches this row's format code and no default is set.
 
 **"PDF not found for MID row"** — the filename in the sheet does not match a
-file in the data directory. Names are matched exactly, then with `-` replaced
-by `_`.
+file in the data directory. Names are matched exactly; a name with no
+extension is tried as `.pdf`.
 
 **Pages look blank, or only page 1 is reachable** — check the page reference
 column. Leave it unconfigured to work through the whole document.
@@ -487,9 +523,8 @@ pip install -r requirements-dev.txt
 python -m pytest
 ```
 
-At the time of writing: 280 pass, 4 fail. The four are long-standing and
-unrelated to the current work — two concern the audit report's shape and two
-are `MIDManager` expectations marked strict-xfail that now pass.
+The suite runs under a generic test schema declared in `tests/conftest.py`;
+nothing in it depends on any particular project's column names.
 
 To build a distributable executable, see [PACKAGING.md](PACKAGING.md).
 
@@ -500,8 +535,9 @@ changes are documented in [REFACTOR_NOTES.md](REFACTOR_NOTES.md). In short:
 | --- | --- |
 | `scraping_helper.py` | The controller: state, navigation, MID edits, file output |
 | `ui/` | Every widget. The controller holds no widget references |
-| `mid_schema.py` | Which column plays which role |
+| `mid_schema.py` | Which column plays which role, and how each field is edited |
 | `mid_manager.py` | Loading, restricting and mutating the spreadsheet |
+| `field_dialog.py` | The Configure Fields dialog |
 | `document_session.py` | One open PDF and its scrape, shared by every row about it |
 | `field_formula.py` | The formula language used by field buttons |
 | `module_settings.py` | Settings a module declares for itself |

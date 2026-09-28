@@ -228,7 +228,7 @@ def test_the_live_restrictions_are_offered_in_both_working_modes(one_document_ap
 def test_restricting_to_the_current_document_keeps_only_its_rows(one_document_app):
     window = one_document_app("Dev")
 
-    window.restrict_to_live_selection("same_document")
+    window.apply_restriction("same_document")
     assert window.mid_manager.view_indices == [0, 1]
 
 
@@ -239,8 +239,10 @@ def test_restricting_to_duplicates_walks_the_colliding_rows(one_document_app):
     for position in (0, 1):
         window.mid_manager.set_value(position, "agency", "DOJ")
         window.mid_manager.set_value(position, "year", "2024")
+    # Restricting commits the sidebar first, so it has to show the new values.
+    window.load_mid_fields_from_row()
 
-    window.restrict_to_live_selection("duplicate_observation")
+    window.apply_restriction("duplicate_observation")
     assert window.mid_manager.view_indices == [0, 1]
 
 
@@ -257,7 +259,7 @@ def test_restricting_to_duplicates_reports_when_there_are_none(
         QMessageBox, "information", lambda *args, **kwargs: shown.append(args)
     )
 
-    window.restrict_to_live_selection("duplicate_observation")
+    window.apply_restriction("duplicate_observation")
     assert shown, "the user was not told there was nothing to review"
     assert window.mid_manager.view_indices == [0, 1, 2]
 

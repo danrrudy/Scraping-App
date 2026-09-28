@@ -9,8 +9,6 @@ from PyQt5.QtWidgets import (
     QDialogButtonBox,
     QFormLayout,
     QLabel,
-    QListWidget,
-    QListWidgetItem,
     QMessageBox,
     QVBoxLayout,
 )
@@ -81,12 +79,14 @@ class MIDSchemaDialog(QDialog):
             "Every MID row must say which document it refers to, so the "
             "document filename is the only column that has to already exist "
             "in the sheet.\n\n"
-            "X/Y identifiers are optional. Leave them unconfigured, or list "
-            "them as editable fields below to assign them from within the app "
+            "X/Y identifiers are optional. Leave them unconfigured, or add "
+            "them under Configure Fields to assign them from within the app "
             "— you can type a column name that the sheet does not have yet "
             "and it will be created.\n\n"
             "If no filename column is configured, the X/Y pair composes the "
-            "filename instead and cannot be edited."
+            "filename instead and cannot be edited.\n\n"
+            "The columns you edit in the sidebar are set up separately, "
+            "under Configure Fields."
         )
         explanation.setWordWrap(True)
         layout.addWidget(explanation)
@@ -140,24 +140,6 @@ class MIDSchemaDialog(QDialog):
             combo.currentTextChanged.connect(self._refresh_entry_label_preview)
         self._refresh_entry_label_preview()
 
-        layout.addWidget(QLabel("Editable MID columns:"))
-        self.interaction_list = QListWidget()
-        self.interaction_list.setSelectionMode(QListWidget.MultiSelection)
-        selected = set(self.schema.interaction_columns)
-        # Identifier columns typed in above may not be in the sheet yet, but
-        # they still have to be selectable as editable fields.
-        listed = list(
-            dict.fromkeys([*self.columns, *sorted(selected - set(self.columns))])
-        )
-        for column in listed:
-            item = QListWidgetItem(column)
-            # Selection only takes on an item the list already owns, so this
-            # has to follow addItem — otherwise reopening the dialog and
-            # pressing OK would clear every editable column.
-            self.interaction_list.addItem(item)
-            item.setSelected(column in selected)
-        layout.addWidget(self.interaction_list)
-
         self.new_columns_hint = QLabel("")
         self.new_columns_hint.setWordWrap(True)
         layout.addWidget(self.new_columns_hint)
@@ -194,12 +176,11 @@ class MIDSchemaDialog(QDialog):
             if column
         }
         try:
+            # Only the label matters here, so the configuration rules the OK
+            # button enforces are sidestepped.
             schema = MIDSchema(
                 x_column=x_column,
                 y_column=y_column,
-                # Only the label matters here, so sidestep the configuration
-                # rules the OK button is responsible for enforcing.
-                interaction_columns=("preview",),
                 document_column=document_column,
                 entry_label=str(self.entry_label_combo.currentData() or ""),
             )
@@ -224,7 +205,7 @@ class MIDSchemaDialog(QDialog):
         if new_columns:
             self.new_columns_hint.setText(
                 f"Will be created when the MID loads: {', '.join(new_columns)}. "
-                "Select them above to make them editable."
+                "Add them under Configure Fields to make them editable."
             )
         else:
             self.new_columns_hint.setText("")
@@ -235,13 +216,11 @@ class MIDSchemaDialog(QDialog):
         Raises ``ValueError`` when they do not describe a usable one, which is
         what the OK button turns into a warning.
         """
-        interaction_columns = [
-            item.text() for item in self.interaction_list.selectedItems()
-        ]
+        # The fields are configured in their own dialog; carried across.
         schema = MIDSchema(
             x_column=self._combo_value(self.x_combo),
             y_column=self._combo_value(self.y_combo),
-            interaction_columns=tuple(interaction_columns),
+            fields=self.schema.fields,
             document_column=self._combo_value(self.document_combo),
             page_column=self._combo_value(self.page_combo),
             format_column=self._combo_value(self.format_combo),

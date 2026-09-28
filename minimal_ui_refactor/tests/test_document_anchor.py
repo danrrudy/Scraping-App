@@ -132,7 +132,6 @@ def test_a_filename_without_an_extension_still_resolves_to_a_pdf():
 
     assert schema.document_candidates({"source_file": "AGENCY-2024"}) == (
         "AGENCY-2024.pdf",
-        "AGENCY_2024.pdf",
     )
 
 
@@ -290,45 +289,3 @@ def test_assigned_identifiers_survive_navigating_away_and_back(application_facto
     window.prev_mid_entry()
     assert window.current_document_key == "REPORT_A.pdf"
     assert window.ui.field_text("agency") == "DOJ"
-
-
-@pytest.mark.qt
-@pytest.mark.integration
-def test_exported_text_is_named_after_the_document_when_unassigned(
-    application_factory, tmp_path, monkeypatch
-):
-    from pathlib import Path
-
-    window = application_factory(
-        rows=_filename_rows("REPORT_A.pdf"),
-        schema=FILENAME_SCHEMA,
-        documents={"REPORT_A.pdf"},
-    )
-    monkeypatch.setattr(window, "next_mid_entry", lambda: None)
-    window.page_text_cache = ["Only page"]
-
-    window.accept_scrape()
-    assert (Path(window.accept_dir) / "REPORT_A_full.txt").is_file()
-
-
-@pytest.mark.qt
-@pytest.mark.integration
-def test_export_names_keep_observations_from_one_file_apart(
-    application_factory, monkeypatch
-):
-    from pathlib import Path
-
-    window = application_factory(
-        rows=_filename_rows("REPORT_A.pdf"),
-        schema=FILENAME_SCHEMA,
-        documents={"REPORT_A.pdf"},
-    )
-    monkeypatch.setattr(window, "next_mid_entry", lambda: None)
-
-    window.ui.set_field_text("agency", "DOJ")
-    window.ui.set_field_text("year", "2024")
-    window._commit_sidebar_fields()
-    window.load_mid_entry_document()
-
-    window.accept_scrape()
-    assert (Path(window.accept_dir) / "REPORT_A__DOJ__2024_full.txt").is_file()

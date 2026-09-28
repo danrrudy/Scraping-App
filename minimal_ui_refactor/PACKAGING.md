@@ -202,9 +202,8 @@ points at changes underneath you, and the build has to keep matching the
 check these dates: when a build starts hanging, this table is the first thing
 to look at.
 
-The test job deliberately deselects the four long-standing failures listed at
-the bottom of this file. It stays a real gate — any *other* failure stops the
-build before anything is packaged. Delete a `--deselect` line as each is fixed.
+The test job is a real gate: any failure stops the build before anything is
+packaged.
 
 To cut a release: bump `__version__` in `version.py`, commit, then
 
@@ -251,22 +250,13 @@ Worth it if the audience is beyond a handful of colleagues; overkill if not.
 
 ## Checklist before shipping a build
 
-- [ ] `python -m pytest` passes (four failures predate this work — see below).
+- [ ] `python -m pytest` passes.
 - [ ] The build folder is around 195 MB, not gigabytes. A jump means an
       excluded dependency crept back in.
 - [ ] Unzip somewhere fresh and launch it. `user_settings.json`, `logs/`,
       `scrapers/` and `extractors/` should appear beside the executable.
 - [ ] The first log line names the version; the second says `(portable)`.
 - [ ] Point it at a real MID and confirm a document opens.
-
-### Known pre-existing test failures
-
-Four tests fail on `main` and still fail here; none are packaging-related:
-
-- `test_audit_runner.py::test_audit_writes_detailed_and_summary_reports`
-- `test_audit_runner.py::test_audit_records_missing_pdf_as_fatal_failure`
-- `test_mid_manager.py::test_direct_navigation_can_select_first_row`
-- `test_mid_manager.py::test_propagated_flag_is_persistent_in_master_dataframe`
-
-The last two are `XPASS(strict)` — they describe bugs that have since been
-fixed, so the expectation of failure is now wrong.
+- [ ] Opening it with a `user_settings.json` from the previous version shows
+      the "Settings From Another Version" prompt once, and not again after
+      choosing Yes.

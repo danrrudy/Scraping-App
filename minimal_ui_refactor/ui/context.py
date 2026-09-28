@@ -7,17 +7,26 @@ widgets stay ignorant of MIDs, schemas, and pandas.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Mapping, Sequence
+from dataclasses import dataclass
+from typing import Sequence
 
 
 @dataclass(frozen=True)
 class FieldSpec:
-    """One editable free-text field in the left sidebar."""
+    """One editable field in the left sidebar.
+
+    ``kind`` is ``"text"`` (a free-text box), ``"dropdown"`` or ``"radio"``;
+    the last two present ``options``. ``expandable`` draws the "+" button
+    that adds a row at this hierarchy level, bound to ``add_shortcut`` if one
+    is given.
+    """
 
     key: str
     label: str
-    expandable: bool = False  # draws the "+" add-a-row button next to the editor
+    kind: str = "text"
+    options: tuple[str, ...] = ()
+    expandable: bool = False
+    add_shortcut: str = ""
 
 
 @dataclass(frozen=True)
@@ -68,9 +77,8 @@ class UIContext:
     field_buttons: Sequence[FieldButtonSpec] = ()
     info: Sequence[InfoSpec] = ()
     restriction_options: Sequence[str] = ()
-    evaluation_classes: Mapping[str, Mapping] = field(default_factory=dict)
-    default_class: str = ""
-    reviewer_notes_enabled: bool = True
+    #: Whether the "Copy Previous Year" control has anything to work with.
+    prior_year_copy: bool = False
 
     @property
     def field_keys(self) -> tuple[str, ...]:

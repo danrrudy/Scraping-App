@@ -3,18 +3,19 @@
 
 from copy import deepcopy
 
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QFormLayout, QLineEdit, QHBoxLayout, QMessageBox, QFileDialog, QComboBox, QInputDialog, QWidget
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QPushButton, QFormLayout, QLineEdit, QHBoxLayout, QMessageBox, QFileDialog, QComboBox, QInputDialog
 import json
 import os
 import pandas as pd
 from logger import setup_logger
 from scraping_tool_dialog import ScrapingToolDialog
 from extraction_tool_dialog import ExtractionToolDialog
-from class_dialog import ClassDialog
+from field_dialog import FieldDialog
 from mid_schema_dialog import MIDSchemaDialog
 from checkbox_dialog import CheckboxDialog
 from module_settings_dialog import ModuleSettingsDialog
 import module_settings
+from app_settings import VERSION_KEY
 from field_button_dialog import FieldButtonDialog
 from statistics_dialog import StatisticsSelectionDialog
 import mid_template
@@ -109,7 +110,8 @@ class SettingsDialog(QDialog):
                 continue
             elif key == "extractionTools":
                 continue
-            elif key == "evaluationClasses":
+            # Written by the program, never edited by hand
+            elif key == VERSION_KEY:
                 continue
             elif key == "midSchema":
                 continue
@@ -158,9 +160,9 @@ class SettingsDialog(QDialog):
         self.extraction_button.clicked.connect(self.open_extraction_tool_dialog)
         button_layout.addWidget(self.extraction_button)
 
-        self.classes_button = QPushButton("Modify Classes")
-        self.classes_button.clicked.connect(self.open_class_dialog)
-        button_layout.addWidget(self.classes_button)
+        self.field_button = QPushButton("Configure Fields")
+        self.field_button.clicked.connect(self.open_field_dialog)
+        button_layout.addWidget(self.field_button)
 
         self.checkbox_button = QPushButton("Configure Checkboxes")
         self.checkbox_button.clicked.connect(self.open_checkbox_dialog)
@@ -495,25 +497,16 @@ class SettingsDialog(QDialog):
                     if current_default in extractor_names:
                         widget.setCurrentText(current_default)
 
-        # Creates an instance of ExtractionToolDialog for interactive tool definitions
-    def open_class_dialog(self):
-        dialog = ClassDialog(self.settings, self)
+    # Creates an instance of FieldDialog for defining the sidebar's fields
+    def open_field_dialog(self):
+        try:
+            dialog = FieldDialog(self.settings, self)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Field Configuration", str(exc))
+            return
         if dialog.exec_():
-            # Update settings with user edits
             self.settings.update(dialog.updated_settings)
-            self.logger.info("Status Classes updated")
-
-            classes = self.settings.get("evaluationClasses", {})
-            class_names = list(classes.keys())
-
-            if "defaultClass" in self.inputs:
-                widget = self.inputs["defaultClass"]
-                if isinstance(widget, QComboBox):
-                    widget.clear()
-                    widget.addItems(class_names)
-                    current_default = self.settings.get("defaultClass", "")
-                    if current_default in class_names:
-                        widget.setCurrentText(current_default)
+            self.logger.info("Field configuration updated")
 
     # Future addition: "Reset to Defaults" button
 

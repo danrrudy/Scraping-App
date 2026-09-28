@@ -1,7 +1,8 @@
 """Configurable column roles for Master Input Documents.
 
-The schema deliberately describes only flat MID behavior. Legacy hierarchy
-operations remain in ``mid_manager.py`` until that system is redesigned.
+A schema names the column that says which document each row is about, the
+optional X/Y identifier columns, and the *fields*: the columns the user edits
+in the sidebar. Nothing here assumes any particular project's column names.
 """
 
 from __future__ import annotations
@@ -13,29 +14,6 @@ from typing import Any, Iterable, Mapping
 
 import pandas as pd
 
-
-LEGACY_HIERARCHY_COLUMNS = ("stratobj", "obj", "goal", "metric")
-
-LEGACY_SOURCE_COLUMNS = (
-    "agency_yr",
-    "agency",
-    "year",
-    "agid",
-    "subagency",
-    "stratobj",
-    "obj",
-    "goal",
-    "metric",
-    "PDF Page Number",
-    "Format",
-    "Format_Detail",
-    "Results_DisplayFormat",
-    "Table Name/Word Search Keyword",
-    "Other Detail",
-    "Format_Type",
-    "Format_Type_Updated",
-    "Page",
-)
 
 def _join(parts: Iterable[str], separator: str) -> str:
     """Join the parts that have a value, so a blank never leaves a stray gap."""
@@ -65,7 +43,8 @@ ENTRY_LABEL_FORMATS = {
     ),
 }
 
-#: Composing X and Y with an em dash is what the application always did.
+#: Composing X and Y with an em dash is what the application always did. A
+#: row with no identifiers falls back to its document name regardless.
 DEFAULT_ENTRY_LABEL = "x_dash_y"
 
 
@@ -84,34 +63,163 @@ def normalize_entry_label(value: Any) -> str:
     return key if key in ENTRY_LABEL_FORMATS else DEFAULT_ENTRY_LABEL
 
 
+# ----------------------------------------------------------------------
+# Fields
+# ----------------------------------------------------------------------
+
+#: How a field is edited in the sidebar. ``text`` is a free-text box;
+#: ``dropdown`` and ``radio`` offer a fixed list of options.
+FIELD_KINDS = ("text", "dropdown", "radio")
+
+#: The field kinds that carry an options list.
+CHOICE_FIELD_KINDS = ("dropdown", "radio")
+
+
+def _option_list(value: Any) -> tuple[str, ...]:
+    """Options may arrive as a list or as one string, one option per line."""
+    if isinstance(value, str):
+        parts = value.splitlines()
+    elif isinstance(value, Iterable):
+        parts = [str(part) for part in value]
+    else:
+        parts = []
+    cleaned = (part.strip() for part in parts)
+    return tuple(dict.fromkeys(part for part in cleaned if part))
+
+
+def default_field_label(column: str) -> str:
+    """A readable label for a column name.
+
+    Underscores become spaces. A name with no capitals of its own is
+    title-cased; one that has them (``LMIG_Exp``, ``FY``) is left alone,
+    since title-casing would mangle the abbreviation.
+    """
+    label = column.replace("_", " ").strip()
+    return label.title() if label == label.lower() else label
+
+
+@dataclass(frozen=True)
+class FieldConfig:
+    """One editable MID column and how the sidebar presents it.
+
+    ``hierarchy`` marks the field as one level of a nested structure: each
+    such field gets a ``+`` button that adds a new row below the current
+    one, keeping the levels above and clearing this one and those beneath.
+    Levels are ordered the way the fields are listed. ``add_shortcut`` is the
+    key sequence bound to that button, if any.
+    """
+
+    column: str
+    label: str = ""
+    kind: str = "text"
+    options: tuple[str, ...] = ()
+    hierarchy: bool = False
+    add_shortcut: str = ""
+
+    def __post_init__(self):
+        object.__setattr__(self, "column", clean_value(self.column))
+        object.__setattr__(
+            self, "label", clean_value(self.label) or default_field_label(self.column)
+        )
+        kind = clean_value(self.kind).lower()
+        object.__setattr__(self, "kind", kind if kind in FIELD_KINDS else "text")
+        object.__setattr__(
+            self,
+            "options",
+            _option_list(self.options) if self.kind in CHOICE_FIELD_KINDS else (),
+        )
+        object.__setattr__(self, "hierarchy", bool(self.hierarchy))
+        object.__setattr__(self, "add_shortcut", clean_value(self.add_shortcut))
+
+    @property
+    def is_choice(self) -> bool:
+        return self.kind in CHOICE_FIELD_KINDS
+
+    @classmethod
+    def from_mapping(cls, value: Any) -> "FieldConfig | None":
+        """Build a field from a stored definition, or ``None`` if unusable.
+
+        A bare string is taken as a column name, which is how fields were
+        stored before they had any options.
+        """
+        if isinstance(value, str):
+            value = {"column": value}
+        if not isinstance(value, Mapping):
+            return None
+        field = cls(
+            column=value.get("column", ""),
+            label=value.get("label", ""),
+            kind=value.get("kind", "text"),
+            options=value.get("options", ()),
+            hierarchy=value.get("hierarchy", False),
+            add_shortcut=value.get("addShortcut", value.get("add_shortcut", "")),
+        )
+        return field if field.column else None
+
+    def to_mapping(self) -> dict[str, Any]:
+        return {
+            "column": self.column,
+            "label": self.label,
+            "kind": self.kind,
+            "options": list(self.options),
+            "hierarchy": self.hierarchy,
+            "addShortcut": self.add_shortcut,
+        }
+
+
+def normalize_fields(value: Any) -> tuple[FieldConfig, ...]:
+    """Complete, de-duplicated field definitions from whatever was stored.
+
+    Accepts a list of definitions, a list of bare column names, or a
+    comma-separated string of column names. Entries without a column are
+    dropped rather than raising, so a hand-edited settings file cannot stop
+    the application from starting.
+    """
+    if isinstance(value, str):
+        value = [part.strip() for part in value.split(",")]
+    fields: list[FieldConfig] = []
+    seen: set[str] = set()
+    for entry in value or []:
+        field = FieldConfig.from_mapping(entry)
+        if field is None or field.column in seen:
+            continue
+        seen.add(field.column)
+        fields.append(field)
+    return tuple(fields)
+
+
+# ----------------------------------------------------------------------
+# Schema
+# ----------------------------------------------------------------------
+
+#: What the generated starter MID names its one column, and so what a fresh
+#: installation expects to find. Everything else is configured in Settings.
+DEFAULT_DOCUMENT_COLUMN = "Filename"
+
 DEFAULT_MID_SCHEMA = {
-    "xColumn": "agency",
-    "yColumn": "year",
-    "interactionColumns": list(LEGACY_HIERARCHY_COLUMNS),
-    "documentColumn": "agency_yr",
-    "pageColumn": "PDF Page Number",
-    "formatColumn": "Format_Type_Updated",
-    "keywordColumn": "Table Name/Word Search Keyword",
+    "xColumn": "",
+    "yColumn": "",
+    "fields": [],
+    "documentColumn": DEFAULT_DOCUMENT_COLUMN,
+    "pageColumn": "",
+    "formatColumn": "",
+    "keywordColumn": "",
     "entryLabel": DEFAULT_ENTRY_LABEL,
 }
 
-# These columns support the current review workflow. They are created in
-# memory when absent, so a source MID does not need to contain them.
+# The columns the application itself writes to, whatever the project. They
+# are created in memory when absent, so a source MID does not need to
+# contain them.
 WORKFLOW_COLUMN_DEFAULTS = {
-    "classification_scheme": "",
-    "metric_status": "",
-    "target": "",
-    "actual": "",
-    "years_to_evaluation": "",
+    # The one checkbox every configuration has; reviewer rejection sets it.
     "_flag": False,
-    "_no_metrics": False,
+    # Rows the application created (added observations, hierarchy children)
+    # rather than ones the MID came with.
     "_gen": False,
-    "_achieved": False,
-    "_future_dated": False,
-    "_aggregate": False,
     "notes": "",
     "reviewer_comments": "",
     "reviewer_status": "",
+    # The page the row was last looked at on. Always an int once set.
     "Page": "",
     # Set once the user saves a change to a row, and kept in the exported MID
     # so "which rows have I already been through?" survives closing the app.
@@ -121,17 +229,11 @@ WORKFLOW_COLUMN_DEFAULTS = {
 #: The persistent per-row flag in :data:`WORKFLOW_COLUMN_DEFAULTS`.
 EDITED_COLUMN = "_edited"
 
+#: The page column in :data:`WORKFLOW_COLUMN_DEFAULTS`; the one column whose
+#: type the application enforces, because it is compared with page indices.
+PAGE_COLUMN = "Page"
+
 _INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
-
-
-def _column_list(value: Any) -> tuple[str, ...]:
-    if isinstance(value, str):
-        values = [part.strip() for part in value.split(",")]
-    elif isinstance(value, Iterable):
-        values = [str(part).strip() for part in value]
-    else:
-        values = []
-    return tuple(dict.fromkeys(value for value in values if value))
 
 
 def clean_value(value: Any) -> str:
@@ -143,6 +245,23 @@ def clean_value(value: Any) -> str:
     except (TypeError, ValueError):
         pass
     return str(value).strip()
+
+
+def coerce_page(value: Any) -> int | str:
+    """A page value as an int, or ``""`` when it does not name a page.
+
+    Spreadsheets hand back ``"3"``, ``3.0`` and ``3`` for the same cell, and
+    the page is compared with integer page indices, so it is normalised once
+    on the way in rather than at every comparison.
+    """
+    text = clean_value(value)
+    if not text:
+        return ""
+    try:
+        number = int(float(text))
+    except (TypeError, ValueError):
+        return ""
+    return number if number > 0 else ""
 
 
 def safe_filename_stem(value: str, fallback: str = "observation") -> str:
@@ -167,9 +286,9 @@ def normalize_sheet_name(value: Any) -> int | str:
 class MIDSchema:
     """Maps generic MID columns to roles used by the application."""
 
-    x_column: str
-    y_column: str
-    interaction_columns: tuple[str, ...]
+    x_column: str = ""
+    y_column: str = ""
+    fields: tuple[FieldConfig, ...] = ()
     document_column: str = ""
     page_column: str = ""
     format_column: str = ""
@@ -178,7 +297,7 @@ class MIDSchema:
     entry_label: str = DEFAULT_ENTRY_LABEL
 
     @classmethod
-    def legacy(cls) -> "MIDSchema":
+    def default(cls) -> "MIDSchema":
         return cls.from_mapping(DEFAULT_MID_SCHEMA)
 
     @classmethod
@@ -190,10 +309,15 @@ class MIDSchema:
         data = dict(DEFAULT_MID_SCHEMA)
         if mapping:
             data.update(mapping)
+        # Fields used to be stored as a bare list of column names under
+        # ``interactionColumns``; a settings file from then still loads.
+        stored_fields = data.get("fields")
+        if not stored_fields and "interactionColumns" in data:
+            stored_fields = data.get("interactionColumns")
         schema = cls(
             x_column=clean_value(data.get("xColumn")),
             y_column=clean_value(data.get("yColumn")),
-            interaction_columns=_column_list(data.get("interactionColumns", [])),
+            fields=normalize_fields(stored_fields),
             document_column=clean_value(data.get("documentColumn")),
             page_column=clean_value(data.get("pageColumn")),
             format_column=clean_value(data.get("formatColumn")),
@@ -207,13 +331,22 @@ class MIDSchema:
         return {
             "xColumn": self.x_column,
             "yColumn": self.y_column,
-            "interactionColumns": list(self.interaction_columns),
+            "fields": [field.to_mapping() for field in self.fields],
             "documentColumn": self.document_column,
             "pageColumn": self.page_column,
             "formatColumn": self.format_column,
             "keywordColumn": self.keyword_column,
             "entryLabel": normalize_entry_label(self.entry_label),
         }
+
+    def with_fields(self, fields: Iterable[Any]) -> "MIDSchema":
+        """A copy of this schema with a different field list."""
+        return MIDSchema.from_mapping(
+            dict(self.to_mapping(), fields=[
+                field.to_mapping() if isinstance(field, FieldConfig) else field
+                for field in fields
+            ])
+        )
 
     def validate_configuration(self) -> None:
         if not self.document_column and not (self.x_column and self.y_column):
@@ -223,8 +356,6 @@ class MIDSchema:
             )
         if self.x_column and self.x_column == self.y_column:
             raise ValueError("X and Y identifier columns must be different.")
-        if not self.interaction_columns:
-            raise ValueError("Select at least one MID column to interact with.")
         if not self.document_column and self.editable_identifiers:
             # With no filename column the X/Y pair *is* the filename, so making
             # it editable would repoint the row at a different document.
@@ -233,7 +364,46 @@ class MIDSchema:
                 "the file, so they cannot also be editable fields: "
                 f"{sorted(self.editable_identifiers)}"
             )
+        if self.document_column in self.interaction_columns:
+            raise ValueError(
+                f"The document filename column '{self.document_column}' "
+                "cannot also be an editable field."
+            )
 
+    # ------------------------------------------------------------------
+    # Fields
+    # ------------------------------------------------------------------
+    @property
+    def interaction_columns(self) -> tuple[str, ...]:
+        """The editable columns, in sidebar order."""
+        return tuple(field.column for field in self.fields)
+
+    def field(self, column: str) -> FieldConfig | None:
+        return next((field for field in self.fields if field.column == column), None)
+
+    @property
+    def hierarchy_columns(self) -> tuple[str, ...]:
+        """The fields that form nested levels, outermost first."""
+        return tuple(field.column for field in self.fields if field.hierarchy)
+
+    def hierarchy_below(self, column: str) -> tuple[str, ...]:
+        """``column`` and every hierarchy level beneath it."""
+        levels = self.hierarchy_columns
+        if column not in levels:
+            return ()
+        return levels[levels.index(column):]
+
+    @property
+    def supports_prior_year_copy(self) -> bool:
+        """Whether "copy the previous Y's hierarchy" can mean anything.
+
+        It needs an X to match on, a Y to count back from, and levels to copy.
+        """
+        return bool(self.x_column and self.y_column and self.hierarchy_columns)
+
+    # ------------------------------------------------------------------
+    # Columns
+    # ------------------------------------------------------------------
     @property
     def identifier_columns(self) -> tuple[str, ...]:
         """The configured X/Y columns, skipping any left unconfigured."""
@@ -298,6 +468,9 @@ class MIDSchema:
                 "configured columns are created when they are absent."
             )
 
+    # ------------------------------------------------------------------
+    # Rows
+    # ------------------------------------------------------------------
     def observation_key(self, row: Mapping[str, Any]) -> tuple[str, str]:
         return clean_value(row.get(self.x_column)), clean_value(row.get(self.y_column))
 
@@ -334,15 +507,17 @@ class MIDSchema:
         """Columns whose combined value should identify one observation.
 
         A document may host several observations, so the document alone is not
-        an identity; the X/Y pair distinguishes them within it.
+        an identity; the X/Y pair distinguishes them within it. Hierarchy
+        fields are part of it too: a nested structure deliberately repeats
+        the document and identifiers across its rows, one per level.
 
-        Seam: if one document ever needs the same X/Y pair twice (two tables
-        for the same agency-year, say), add an ``occurrence`` column to the
-        schema and append it here. Everything that checks for duplicates reads
-        this property.
+        Seam: if one document ever needs the same identity twice, add an
+        ``occurrence`` column to the schema and append it here. Everything
+        that checks for duplicates reads this property.
         """
         columns = [self.document_column] if self.document_column else []
         columns.extend(self.identifier_columns)
+        columns.extend(self.hierarchy_columns)
         return tuple(dict.fromkeys(column for column in columns if column))
 
     def observation_identity(self, row: Mapping[str, Any]) -> tuple[str, ...]:
@@ -368,17 +543,12 @@ class MIDSchema:
         )
 
     def document_candidates(self, row: Mapping[str, Any]) -> tuple[str, ...]:
+        """Filenames to try for this row: as written, defaulting to ``.pdf``."""
         base_value = self.document_name(row)
         if not base_value:
             return ()
         _, extension = os.path.splitext(base_value)
-        candidates = [base_value if extension else f"{base_value}.pdf"]
-
-        # Compatibility with legacy agency-year values whose PDFs use underscores.
-        underscored = candidates[0].replace("-", "_")
-        if underscored != candidates[0]:
-            candidates.append(underscored)
-        return tuple(dict.fromkeys(candidates))
+        return (base_value if extension else f"{base_value}.pdf",)
 
     def format_type(self, row: Mapping[str, Any], default: int = -1) -> int:
         if not self.format_column:
@@ -387,8 +557,3 @@ class MIDSchema:
             return int(clean_value(row.get(self.format_column)))
         except (TypeError, ValueError):
             return default
-
-    def is_legacy_hierarchy_compatible(self, columns: Iterable[str]) -> bool:
-        available = set(columns)
-        required = set(LEGACY_HIERARCHY_COLUMNS) | {"agency", "year"}
-        return required.issubset(available)

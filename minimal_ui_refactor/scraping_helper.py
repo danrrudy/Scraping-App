@@ -1,14 +1,10 @@
-import base64
 import json
 import os
-import re
 import sys
-from io import BytesIO
 
 import fitz  # PyMuPDF
 import pandas as pd
 from PyQt5.QtCore import QEvent, QProcess, Qt, QTimer
-from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtWidgets import (
     QApplication,
     QDialog,
@@ -34,10 +30,9 @@ from document_text import (
     DocumentIndex,
     DocumentIndexCache,
 )
-from extractor_loader import select_extractor_class
 from logger import setup_logger
 from mid_manager import MIDManager
-from mid_schema import LEGACY_HIERARCHY_COLUMNS, MIDSchema
+from mid_schema import MIDSchema
 import paths
 import session_metrics
 from session_metrics import SessionMetrics
@@ -67,8 +62,14 @@ if root_dir not in sys.path:
 BASE_WIDTH = 1200
 BASE_HEIGHT = 800
 
-#: Restriction choices the app answers itself rather than from an audit report.
+#: Restriction choices answered from the MID's own state, in every mode.
 LIVE_RESTRICTIONS = ("same_document", "duplicate_observation")
+
+#: Restriction choices answered from one MID column, in every mode.
+COLUMN_RESTRICTIONS = ("_flag", "_gen", "rejected")
+
+#: The choice that lifts a restriction.
+NO_RESTRICTION = "none"
 
 #: Command-line flag carrying the MID row to reopen on after a restart.
 RESUME_FLAG = "--resume-index"
@@ -112,15 +113,7 @@ class TextScrapingReviewApp(QMainWindow):
         )
 
         self.mode = self.settings.get("userMode", "User").lower()
-        self.mid_df = None
         self.current_mid_index = 0
-        self.edit_path = {
-            "layer": None,
-            "stratobj": 0,
-            "obj": 0,
-            "goal": 0,
-            "metric": 0,
-        }
 
         # Initiate the MID manager if settings are already set
         mid_path = self.settings.get("MIDLocation", "")
@@ -167,29 +160,7 @@ class TextScrapingReviewApp(QMainWindow):
         # mistaken for the user typing.
         self._loading_entry = False
 
-        self.manual_review = {  # Structure for tracking user Accept/Rejects (will likely be changed)
-            "active_test": None,
-            "results": {},  # format: {row_index: {"status": "ACCEPT" or "REJECT", "label": ..., "pages": [...]}}
-        }
         self.mid_field_keys = list(self.mid_schema.interaction_columns)
-
-        loaded_columns = (
-            self.mid_manager.df.columns if hasattr(self, "mid_manager") else []
-        )
-        self.legacy_hierarchy_enabled = (
-            self.mid_schema.is_legacy_hierarchy_compatible(loaded_columns)
-            and set(LEGACY_HIERARCHY_COLUMNS).issubset(self.mid_field_keys)
-        )
-
-        self.expansion_state = {
-            "base_level": None,  # lowest present on the seed row (stratobj|obj|goal|metric|None)
-            "working_level": None,  # where the user is currently adding units
-            "seed_index": None,  # index of the original (non-generated) row we started from
-        }
-
-        # coords from the most recent scrape (overlays live on the session)
-        self.cells_by_page = {}  # {page_index: [(x0,y0,x1,y1), ...]} (for later click-to-scrape)
-        self.page_dims = {}  # {page_index: (w_pt, h_pt)}         (for later)
 
         # Set up file structure if it doesn't exist
         self.init_files()
@@ -439,13 +410,14 @@ class TextScrapingReviewApp(QMainWindow):
         """
         fields = tuple(
             FieldSpec(
-                key=key,
-                label=key.replace("_", " ").strip().title(),
-                expandable=(
-                    self.legacy_hierarchy_enabled and key in LEGACY_HIERARCHY_COLUMNS
-                ),
+                key=field.column,
+                label=field.label,
+                kind=field.kind,
+                options=field.options,
+                expandable=field.hierarchy,
+                add_shortcut=field.add_shortcut,
             )
-            for key in self.mid_field_keys
+            for field in self.mid_schema.fields
         )
         # Identifiers the user edits are shown as fields, not as read-only info.
         info = [
@@ -469,8 +441,7 @@ class TextScrapingReviewApp(QMainWindow):
             field_buttons=self.field_button_specs_for_ui(),
             info=info,
             restriction_options=self.restriction_options(),
-            evaluation_classes=self.settings.get("evaluationClasses", {}) or {},
-            default_class=self.settings.get("defaultClass", ""),
+            prior_year_copy=self.mid_schema.supports_prior_year_copy,
         )
 
     def checkbox_column_names(self):
@@ -525,87 +496,57 @@ class TextScrapingReviewApp(QMainWindow):
             )
         return tuple(specs)
 
+    def audit_test_names(self):
+        """The audit checks a dev-mode restriction may be drawn from."""
+        options = [
+            "table_detected",
+            "text_scraped",
+            *[f"field:{column}" for column in self.mid_field_keys],
+        ]
+        if self.mid_schema.keyword_column:
+            options.append("keyword_match")
+        options.extend(["pages_parsed", "pdf_found"])
+        return options
+
     def restriction_options(self):
-        """Values offered by the "Restrict to:" selector in the current mode."""
+        """Values offered by the "Restrict to:" selector in the current mode.
+
+        Dev mode reviews the *scrape*: it may restrict to the rows a check in
+        the last audit report failed. Reviewer mode reviews the *entries*: it
+        may restrict to the rows a reviewer has already rejected. Both share
+        the column-backed and live restrictions.
+        """
         mode = self.mode.lower()
         if mode == "dev":
-            options = [
-                "table_detected",
-                "text_scraped",
-                *[f"field:{column}" for column in self.mid_field_keys],
-            ]
-            if self.mid_schema.keyword_column:
-                options.append("keyword_match")
-            options.extend(
-                [
-                    "pages_parsed",
-                    "pdf_found",
-                    "_flag",
-                    "no_status",
-                    "no_t/a",
-                    *LIVE_RESTRICTIONS,
-                    "none",
-                ]
-            )
-            return options
-        if mode == "reviewer":
             return [
+                *self.audit_test_names(),
                 "_flag",
-                "_gen",
-                "rejected",
-                "no_status",
-                "no_t/a",
                 *LIVE_RESTRICTIONS,
-                "none",
+                NO_RESTRICTION,
             ]
+        if mode == "reviewer":
+            return [*COLUMN_RESTRICTIONS, *LIVE_RESTRICTIONS, NO_RESTRICTION]
         return []
 
     # Create Necessary File Structure
     def init_files(self):
-        # Check if the "./data" directory exists; if not, create it
+        # Check if the data directory exists; if not, create it
         data_dir = self.settings.get("dataDirectory", "")
-        self.accept_dir = os.path.join(data_dir, "accepted")
-        self.formatted_dir = os.path.join(self.accept_dir, "formatted")
-        self.reject_dir = os.path.join(data_dir, "rejected")
         if data_dir and not os.path.exists(data_dir):
-            self.logger.warning("./data does not exist! attempting to create directory")
+            self.logger.warning(
+                f"Data directory {data_dir} does not exist; attempting to create it"
+            )
             try:
                 os.makedirs(data_dir)
-                self.logger.info("Created ./data directory for input files")
+                self.logger.info(f"Created data directory {data_dir}")
             except Exception as e:
-                self.logger.error("Failed to Create ./data! Files will not be loaded!")
+                self.logger.error(
+                    "Failed to create the data directory! Files will not be loaded!"
+                )
                 QMessageBox.critical(
                     self, "Error", f"Failed to create data directory:\n{e}"
                 )
-                return
 
-        # Stage 1 accepted directory
-        if not os.path.exists(self.accept_dir):
-            self.logger.info("./data/accepted does not exist, creating")
-            try:
-                os.makedirs(self.accept_dir)
-            except Exception as e:
-                self.logger.error("Failed to Create ./data/accepted!")
-
-        # Stage 2 accepted directory
-        if not os.path.exists(self.formatted_dir):
-            try:
-                os.makedirs(self.formatted_dir)
-            except Exception as e:
-                self.logger.error("Failed to Create ./data/accepted/formatted!")
-
-        # Stage 1 rejected directory
-        if not os.path.exists(self.reject_dir):
-            self.logger.info("./data/rejected does not exist, creating")
-            try:
-                os.makedirs(self.reject_dir)
-            except Exception as e:
-                self.logger.error("Failed to Create ./data/rejected!")
-
-        # TODO: Consolodate this and other file management functions into a utils library
-
-    # Update read-only information for user
-    # Update read-only information for user
     # Update read-only information for user
     def update_info_labels(self):
         self.logger.debug("Updating info labels")
@@ -960,8 +901,7 @@ class TextScrapingReviewApp(QMainWindow):
         super().resizeEvent(event)
         self.show_page()
 
-    # Advances to next page and scrapes it
-    # Advances to next page and scrapes it
+    # Advances to the next page of the open session
     def next_page(self):
         self.logger.debug("Attempting to load next page")
         session = self.document_session
@@ -975,7 +915,7 @@ class TextScrapingReviewApp(QMainWindow):
         else:
             self.logger.warning("Attempted to load invalid page")
 
-    # Moves to previous page and attempts to scrape it
+    # Moves to the previous page of the open session
     def prev_page(self):
         self.logger.debug("Attempting to load previous page")
         session = self.document_session
@@ -988,113 +928,44 @@ class TextScrapingReviewApp(QMainWindow):
         else:
             self.logger.warning("Attempted to load invalid page")
 
+    # ------------------------------------------------------------------
+    # Reviewer verdicts
+    # ------------------------------------------------------------------
     def accept_scrape(self):
-        if self.mode == "dev":
-            if self.manual_review["active_test"]:
-                idx = self.mid_manager.current_index
-                row = self.mid_manager.get_current_row()
-                pages = (
-                    [self.document_session.page_number(self.current_page_index)]
-                    if self.document_session
-                    else []
-                )
-                self.manual_review["results"][idx] = {
-                    "status": "ACCEPT",
-                    "label": self.mid_schema.observation_label(row),
-                    "pages": pages,
-                }
-                self.logger.info(f"Manually accepted row {idx}")
-            # User is not reviewing a test
-            else:
-                QMessageBox.warning(
-                    self,
-                    "Accept",
-                    "No active test! Switch to user mode to review scraping results or select a test",
-                )
-        elif self.mode.lower() == "reviewer":
-            mm = getattr(self, "mid_manager", None)
-            if mm is not None:
-                idx = mm.current_index
-                row = mm.get_current_row()
-                observation_label = self.mid_schema.observation_label(row)
-                notes = self.ui.reviewer_notes_text()
-                review_record = {
-                    "status": "ACCEPT",
-                    "label": observation_label,
-                    "notes": notes,
-                }
-                self.logger.info(
-                    f"Reviewer accepted row {idx} ({observation_label}) with notes: {notes}"
-                )
-                self.mid_manager.set_value(idx, "reviewer_status", "ACCEPT")
-                # Here you would typically save the review_record to a database or file.
-
-        # User is in User mode
-        else:
-            if self.document_session:
-                output_path = os.path.join(
-                    self.accept_dir, f"{self.current_observation_stem}_full.txt"
-                )
-                with open(output_path, "w", encoding="utf-8") as f:
-                    # use the session text so manual edits are included
-                    f.write(self.document_session.full_text())
-                self.logger.info(f"Saved accepted scrape to {output_path}")
-
-        # Outside conditional
-        self._commit_sidebar_fields()
-        self.next_mid_entry()
+        self._record_review_verdict("ACCEPT")
 
     def reject_scrape(self):
-        if self.mode == "dev":
-            if self.manual_review["active_test"]:
-                idx = self.mid_manager.current_index
-                row = self.mid_manager.get_current_row()
-                pages = (
-                    [self.document_session.page_number(self.current_page_index)]
-                    if self.document_session
-                    else []
-                )
-                self.manual_review["results"][idx] = {
-                    "status": "REJECT",
-                    "label": self.mid_schema.observation_label(row),
-                    "pages": pages,
-                }
-                self.logger.info(f"Manually rejected row {idx}")
-                self.next_mid_entry()
-            else:
-                QMessageBox.warning(
-                    self,
-                    "Reject",
-                    "No active test! Switch to user mode to review scraping results or select a test",
-                )
-        elif self.mode.lower() == "reviewer":
-            mm = getattr(self, "mid_manager", None)
-            if mm is not None:
-                idx = mm.current_index
-                row = mm.get_current_row()
-                observation_label = self.mid_schema.observation_label(row)
-                notes = self.ui.reviewer_notes_text()
-                review_record = {
-                    "status": "REJECT",
-                    "label": observation_label,
-                    "notes": notes,
-                }
-                self.ui.set_toggle("flag", True)
-                self.logger.info(
-                    f"Reviewer rejected row {idx} ({observation_label}) with notes: {notes}"
-                )
-                # Here you would typically save the review_record to a database or file.
-                self.mid_manager.set_value(idx, "reviewer_status", "REJECT")
-            self.next_mid_entry()
-        # User Mode:
-        else:
-            if self.document_session:
-                output_path = os.path.join(
-                    self.reject_dir, f"{self.current_observation_stem}_full.txt"
-                )
-                with open(output_path, "w", encoding="utf-8") as f:
-                    f.write(self.document_session.full_text())
-                self.logger.info(f"Saved rejected scrape to {output_path}")
+        # A rejected row is flagged as well, so it shows up under the flag
+        # restriction in every mode.
+        self._record_review_verdict("REJECT", flag=True)
+
+    def _record_review_verdict(self, status: str, flag: bool = False):
+        """Record the reviewer's verdict on the current row and move on.
+
+        The Accept and Reject buttons exist only in reviewer mode; a call
+        from any other mode is a programming error rather than something
+        the user did, so it is logged and ignored.
+        """
+        if self.mode.lower() != "reviewer":
+            self.logger.warning(
+                f"Ignored reviewer verdict '{status}' in {self.mode} mode"
+            )
+            return
+        manager = getattr(self, "mid_manager", None)
+        if manager is None or manager.get_current_row() is None:
+            self.logger.error("No MID row to record a verdict on")
+            return
+
+        idx = manager.current_index
+        label = self.current_observation_label
+        notes = self.ui.reviewer_notes_text()
+        if flag:
+            self.ui.set_toggle("flag", True)
+        manager.set_value(idx, "reviewer_status", status)
+        self.logger.info(
+            f"Reviewer {status.lower()}ed row {idx} ({label}) with notes: {notes}"
+        )
+        self.next_mid_entry()
 
     # Move to the next entry without any output
     def next_mid_entry(self):
@@ -1186,9 +1057,19 @@ class TextScrapingReviewApp(QMainWindow):
             self.ui.focus_field(first_field)
 
     def duplicate_prior_year(self):
-        row = self.mid_manager.get_current_row()
-        self.mid_manager.duplicate_prior_year()
+        """Rebuild this X/Y block from the previous year's hierarchy rows."""
+        self._commit_sidebar_fields()
+        try:
+            created = self.mid_manager.duplicate_prior_year()
+        except ValueError as exc:
+            self.logger.warning(f"Copy Previous Year failed: {exc}")
+            QMessageBox.warning(self, "Copy Previous Year", str(exc))
+            return
+        self.load_mid_entry_document()
         self.update_info_labels()
+        self.ui.set_status_message(
+            f"Copied {created} row(s) from the previous year.", 4000
+        )
 
     # ------------------------------------------------------------------
     # Entry edit tracking
@@ -1275,10 +1156,6 @@ class TextScrapingReviewApp(QMainWindow):
                 )
                 break
 
-            row = self.mid_manager.get_current_row()
-            format_type = self.mid_manager.format_type()
-            # if(format_type not in [19, 20, 21, 22, 23]):
-            #    continue
             success = self.load_mid_entry_document()
             if success:
                 self.update_info_labels()
@@ -1317,7 +1194,6 @@ class TextScrapingReviewApp(QMainWindow):
         if dialog.exec_() == QDialog.Accepted:
             self.logger.info("User updated settings in-app")
             self.settings = dialog.settings
-            self._apply_scheme_settings()
             save_settings(self.settings)
             self.mode = self.settings.get("userMode", "User")
             self.update_mode_ui()
@@ -1456,332 +1332,94 @@ class TextScrapingReviewApp(QMainWindow):
             self.logger.critical(f"AUDIT FAILED: {e}")
             QMessageBox.critical(self, "Audit Error", str(e))
 
-    # basic handler for the fialure loading function below
-    # basic handler for the failure loading function below
+    # ------------------------------------------------------------------
+    # Restrictions
+    # ------------------------------------------------------------------
     def handle_load_failures(self):
-        test_name = self.ui.restriction_choice()
+        """Apply whatever the "Restrict to:" selector says."""
+        self.apply_restriction(self.ui.restriction_choice())
 
-        # These two are answered from the MID itself, so they need no audit run
-        # and behave the same in every mode.
-        if test_name in LIVE_RESTRICTIONS:
-            self.restrict_to_live_selection(test_name)
+    def apply_restriction(self, test_name: str):
+        """Restrict the MID view to the rows ``test_name`` selects.
+
+        ``none`` lifts the restriction. The live and column-backed choices
+        are answered from the MID itself; anything else is taken to be the
+        name of a check in the last audit report, which only dev mode offers.
+        """
+        manager = getattr(self, "mid_manager", None)
+        if manager is None or manager.df is None or manager.df.empty:
+            QMessageBox.information(self, "No MID", "No MID is currently loaded.")
             return
 
-        if self.mode.lower() == "dev":
-            self.load_audit_failures(test_name)
-        elif self.mode.lower() == "reviewer":
-            self.restrict_for_reviewer(test_name)
+        self._commit_sidebar_fields()
+        if test_name == NO_RESTRICTION:
+            manager.clear_restriction()
+            self.logger.info("Cleared restriction; full MID restored")
+            self.load_mid_entry_document()
+            self.update_info_labels()
+            return
 
-    def restrict_to_live_selection(self, test_name: str):
-        """Restrict the view using state the MID already knows."""
-        if test_name == "same_document":
-            positions = self.mid_manager.document_row_positions()
-            empty_message = "This document has no other rows."
-        else:
-            positions = self.mid_manager.duplicate_observation_positions()
-            empty_message = "No rows share an observation identity."
+        try:
+            positions, empty_message = self._restriction_positions(test_name)
+        except Exception as e:
+            self.logger.error(f"Failed to restrict MID (test_name={test_name}): {e}")
+            QMessageBox.critical(self, "Error", f"Could not restrict MID:\n{e}")
+            return
 
         if not positions:
             QMessageBox.information(self, "No Matches", empty_message)
             return
 
-        self.mid_manager.restrict_to_rows(positions)
+        manager.restrict_to_rows(positions)
         self.logger.info(
             f"Restriction applied: {len(positions)} rows matched '{test_name}'"
         )
-        self.manual_review["active_test"] = test_name
-        self.manual_review["results"] = {}
         self.load_mid_entry_document()
         self.update_info_labels()
 
-    def load_audit_failures(self, test_name="text_scraped"):
-        """
-        Dev-mode restriction helper.
-
-        Special values for test_name:
-          - "_flag"     : rows where _flag == True
-          - "_gen"      : rows where _gen == True
-          - "no_status" : rows where metric_status is blank/empty
-          - "no_t/a"    : rows where BOTH target and actual are blank/empty
-          - "none"      : clear restriction (reload MID fresh from disk)
-
-        Otherwise, test_name is treated as an audit_report.json test key and we restrict
-        to rows where that test == "FAIL".
-        """
-        try:
-            if (
-                not hasattr(self, "mid_manager")
-                or self.mid_manager.df is None
-                or self.mid_manager.df.empty
-            ):
-                QMessageBox.information(self, "No MID", "No MID is currently loaded.")
-                return
-
-            # --- Clear restriction: reload MID from disk (since MIDManager has no clear_restriction()) ---
-            if test_name == "none":
-                self.mid_manager.clear_restriction()
-                self.logger.info("Cleared reviewer restrictions; full MID restored")
-                self.load_mid_entry_document()
-                return
-
-            df = self.mid_manager.df
-
-            # -------------------------
-            # Special “column-based” restrictions
-            # -------------------------
-            special = {"_flag", "_gen", "no_status", "no_t/a", "rejected"}
-            if test_name in special:
-                # Ensure helper columns exist with sane defaults
-                if test_name == "_gen":
-                    try:
-                        self.mid_manager.ensure_gen_flag()
-                    except Exception:
-                        if "_gen" not in df.columns:
-                            df["_gen"] = False
-
-                if test_name == "_flag":
-                    if "_flag" not in df.columns:
-                        df["_flag"] = False
-
-                if test_name == "no_status":
-                    if "metric_status" not in df.columns:
-                        df["metric_status"] = ""
-
-                if test_name == "no_t/a":
-                    # Create if missing (some sheets won’t have these yet)
-                    if "target" not in df.columns:
-                        df["target"] = ""
-                    if "actual" not in df.columns:
-                        df["actual"] = ""
-
-                # Build mask per condition
-                if test_name in {"_flag", "_gen"}:
-                    # Normalize to boolean if it arrived as strings
-                    col = test_name
-                    if df[col].dtype != bool:
-                        df[col] = (
-                            df[col]
-                            .astype(str)
-                            .str.strip()
-                            .str.lower()
-                            .isin(["true", "1", "yes", "y"])
-                        )
-                    mask = df[col] == True
-
-                elif test_name == "no_status":
-                    mask = df["metric_status"].fillna("").astype(str).str.strip().eq("")
-
-                elif test_name == "rejected":
-                    mask = df["reviewer_status "].fillna(
-                        "".astype(str).str.strip().eq("REJECT")
-                    )
-
-                else:  # "no_t/a"
-                    t_blank = df["target"].fillna("").astype(str).str.strip().eq("")
-                    a_blank = df["actual"].fillna("").astype(str).str.strip().eq("")
-                    mask = t_blank & a_blank
-
-                # IMPORTANT: restrict_to_rows uses iloc, so pass 0-based positional indices
-                matching_positions = df.index[mask].tolist()
-
-                if not matching_positions:
-                    QMessageBox.information(
-                        self, "No Matches", f"No rows matched restriction: {test_name}"
-                    )
-                    return
-
-                self.mid_manager.restrict_to_rows(matching_positions)
-                self.logger.info(
-                    f"Restriction applied: {len(matching_positions)} rows matched '{test_name}'"
-                )
-
-                # Reset manual review state (optional, but matches your dev-mode review flow)
-                self.manual_review["active_test"] = test_name
-                self.manual_review["results"] = {}
-
-                self.load_mid_entry_document()
-                return
-
-            # -------------------------
-            # Default: restrict to audit FAIL rows for a given test
-            # -------------------------
-            log_path = os.path.join(
-                self.settings.get("logFileDirectory", "./logs"), "audit_report.json"
+    def _restriction_positions(self, test_name: str):
+        """``(master positions, message when there are none)`` for a choice."""
+        manager = self.mid_manager
+        if test_name == "same_document":
+            return manager.document_row_positions(), "This document has no other rows."
+        if test_name == "duplicate_observation":
+            return (
+                manager.duplicate_observation_positions(),
+                "No rows share an observation identity.",
             )
-            with open(log_path, "r", encoding="utf-8") as f:
-                audit_payload = json.load(f)
-            audit_results = (
-                audit_payload.get("results", [])
-                if isinstance(audit_payload, dict)
-                else audit_payload
-            )
+        if test_name in COLUMN_RESTRICTIONS:
+            df = manager.master_df
+            if test_name == "rejected":
+                mask = df["reviewer_status"].astype(str).str.strip().eq("REJECT")
+            else:
+                mask = df[test_name].astype(bool)
+            positions = [int(position) for position in df.index[mask]]
+            return positions, f"No rows matched restriction: {test_name}"
+        return (
+            self._audit_failure_positions(test_name),
+            f"No failures found for test: {test_name}",
+        )
 
-            # audit_runner writes entry["index"] = i+1 (1-based),
-            # but MIDManager.restrict_to_rows expects 0-based iloc positions.
-            failed_positions = [
-                int(entry["index"]) - 1
-                for entry in audit_results
-                if entry.get("tests", {}).get(test_name) == "FAIL"
-                and str(entry.get("index", "")).isdigit()
-            ]
-
-            if not failed_positions:
-                QMessageBox.information(
-                    self, "No Failures", f"No failures found for test: {test_name}"
-                )
-                return
-
-            self.mid_manager.restrict_to_rows(failed_positions)
-            self.logger.info(
-                f"Loaded {len(failed_positions)} failure rows for test '{test_name}' into MID view"
-            )
-
-            self.manual_review["active_test"] = test_name
-            self.manual_review["results"] = {}
-            self.logger.info(f"Manual review mode enabled for test '{test_name}'")
-
-            self.load_mid_entry_document()
-
-        except Exception as e:
-            self.logger.error(f"Failed to restrict MID (test_name={test_name}): {e}")
-            QMessageBox.critical(self, "Error", f"Could not restrict MID:\n{e}")
-
-    def restrict_for_reviewer(self, test_name: str = "none"):
-        """
-        Restrict the MID view to rows where df[condition] is True.
-        Intended for Reviewer mode. Valid conditions: "_flag", "_gen".
-        """
-        try:
-            if (
-                not hasattr(self, "mid_manager")
-                or self.mid_manager.df is None
-                or self.mid_manager.df.empty
-            ):
-                QMessageBox.information(self, "No MID", "No MID is currently loaded.")
-                return
-
-            # --- Clear restriction: reload MID from disk (since MIDManager has no clear_restriction()) ---
-            if test_name == "none":
-                self.mid_manager.clear_restriction()
-                self.logger.info("Cleared reviewer restrictions; full MID restored")
-                self.load_mid_entry_document()
-                return
-
-            df = self.mid_manager.df
-
-            # -------------------------
-            # Special “column-based” restrictions
-            # -------------------------
-            special = {"_flag", "_gen", "no_status", "no_t/a", "rejected"}
-            if test_name in special:
-                # Ensure helper columns exist with sane defaults
-                if test_name == "_gen":
-                    try:
-                        self.mid_manager.ensure_gen_flag()
-                    except Exception:
-                        if "_gen" not in df.columns:
-                            df["_gen"] = False
-
-                if test_name == "_flag":
-                    if "_flag" not in df.columns:
-                        df["_flag"] = False
-
-                if test_name == "no_status":
-                    if "metric_status" not in df.columns:
-                        df["metric_status"] = ""
-
-                if test_name == "no_t/a":
-                    # Create if missing (some sheets won’t have these yet)
-                    if "target" not in df.columns:
-                        df["target"] = ""
-                    if "actual" not in df.columns:
-                        df["actual"] = ""
-
-                # Build mask per condition
-                if test_name in {"_flag", "_gen"}:
-                    # Normalize to boolean if it arrived as strings
-                    col = test_name
-                    if df[col].dtype != bool:
-                        df[col] = (
-                            df[col]
-                            .astype(str)
-                            .str.strip()
-                            .str.lower()
-                            .isin(["true", "1", "yes", "y"])
-                        )
-                    mask = df[col] == True
-
-                elif test_name == "no_status":
-                    mask = df["metric_status"].fillna("").astype(str).str.strip().eq("")
-
-                elif test_name == "rejected":
-                    mask = (
-                        df["reviewer_status"]
-                        .fillna("")
-                        .astype(str)
-                        .str.strip()
-                        .eq("REJECT")
-                    )
-
-                elif test_name == "no_t/a":  # "no_t/a"
-                    t_blank = df["target"].fillna("").astype(str).str.strip().eq("")
-                    a_blank = df["actual"].fillna("").astype(str).str.strip().eq("")
-                    mask = t_blank & a_blank
-
-                # IMPORTANT: restrict_to_rows uses iloc, so pass 0-based positional indices
-                matching_positions = df.index[mask].tolist()
-
-                if not matching_positions:
-                    QMessageBox.information(
-                        self, "No Matches", f"No rows matched restriction: {test_name}"
-                    )
-                    return
-
-                self.mid_manager.restrict_to_rows(matching_positions)
-                self.logger.info(
-                    f"Restriction applied: {len(matching_positions)} rows matched '{test_name}'"
-                )
-
-            # Reset review state if you want reviewer mode to behave like the dev-mode review flow
-            self.manual_review["active_test"] = test_name
-            self.manual_review["results"] = {}
-
-            # Load first row/document in the restricted MID
-            self.load_mid_entry_document()
-
-        except Exception as e:
-            self.logger.error(
-                f"Failed to restrict MID for reviewer (condition={test_name}): {e}"
-            )
-            QMessageBox.critical(
-                self, "Error", f"Could not restrict MID for reviewer:\n{e}"
-            )
-
-    # Save manual reveiw results to JSON (Dev mode only)
-    def export_review_results(self):
-        if not self.manual_review["active_test"]:
-            QMessageBox.information(
-                self,
-                "Not in Review Mode",
-                "You must be in manual review mode to export results.",
-            )
-            return
-
-        try:
-            filename = f"{self.manual_review['active_test']}_review.json"
-            output_path = os.path.join(
-                self.settings.get("logFileDirectory", "./logs"), filename
-            )
-            with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(self.manual_review["results"], f, indent=2)
-
-            self.logger.info(f"Manual review results saved to {output_path}")
-            QMessageBox.information(
-                self, "Export Complete", f"Review results saved to:\n{output_path}"
-            )
-        except Exception as e:
-            self.logger.error(f"Failed to export review results: {e}")
-            QMessageBox.critical(self, "Export Error", str(e))
+    def _audit_failure_positions(self, test_name: str) -> list[int]:
+        """Master positions of the rows that failed ``test_name`` in the last audit."""
+        log_path = os.path.join(
+            self.settings.get("logFileDirectory", "./logs"), "audit_report.json"
+        )
+        with open(log_path, "r", encoding="utf-8") as f:
+            audit_payload = json.load(f)
+        audit_results = (
+            audit_payload.get("results", [])
+            if isinstance(audit_payload, dict)
+            else audit_payload
+        )
+        # audit_runner writes entry["index"] = i+1 (1-based), but
+        # MIDManager.restrict_to_rows expects 0-based iloc positions.
+        return [
+            int(entry["index"]) - 1
+            for entry in audit_results
+            if entry.get("tests", {}).get(test_name) == "FAIL"
+            and str(entry.get("index", "")).isdigit()
+        ]
 
     def save_mid_to_file(self) -> bool:
         """Write the MID out. Returns whether it was actually saved."""
@@ -1859,10 +1497,6 @@ class TextScrapingReviewApp(QMainWindow):
                 # A counter only means something while its checkbox is ticked.
                 commit(counter["column"], str(value) if checked and value else "")
 
-        commit(
-            "classification_scheme", self._safe_text(self.ui.scheme_name()).strip()
-        )
-        commit("metric_status", self._safe_text(self.ui.metric_status()))
         commit("notes", self.ui.notes_text())
         commit("Page", self.current_page_number())
 
@@ -1931,41 +1565,24 @@ class TextScrapingReviewApp(QMainWindow):
         self.update_info_labels()
         self.load_mid_fields_from_row()
 
-    def _levels_to_clear(self, level_key: str) -> list[str]:
-        order = ["stratobj", "obj", "goal", "metric"]
-        if level_key not in order:
-            return []
-        return order[order.index(level_key) :]
-
     def on_add_level_clicked(self, level_key: str):
+        """Add a row one hierarchy level down, from the "+" beside a field."""
         self._commit_sidebar_fields()
-        idx = self.mid_manager.current_index
-        if idx is None:
+        manager = getattr(self, "mid_manager", None)
+        if manager is None or manager.get_current_row() is None:
             return
-        new_row = self.mid_manager.clone_for_child(idx, level_key)
-        to_clear = self._levels_to_clear(level_key)
+        idx = manager.current_index
+        try:
+            new_row = manager.clone_for_child(idx, level_key)
+        except ValueError as exc:
+            self.logger.error(f"Cannot add a row at '{level_key}': {exc}")
+            return
 
-        # Clear metadata where relevant
-        if "goal" in to_clear:
-            if "_no_metrics" in new_row:
-                new_row["_no_metrics"] = False
-
-        if "metric" in to_clear:
-            if "metric_status" in new_row:
-                new_row["metric_status"] = ""
-            if "_achieved" in new_row:
-                new_row["_achieved"] = False
-            if "_future_dated" in new_row:
-                new_row["_future_dated"] = False
-
-        new_idx = self.mid_manager.insert_row_after(idx, new_row)
+        new_idx = manager.insert_row_after(idx, new_row)
+        self.logger.info(
+            f"Added a row at the '{level_key}' level below row {idx} (now row {new_idx})"
+        )
         self._goto_index(new_idx)
-
-        # Update UI
-        for k in to_clear:
-            self.ui.set_field_text(k, "")
-        if "metric" in to_clear:
-            self.ui.set_metric_status("")
         self.ui.focus_field(level_key)
 
     # --- Button slots ---
@@ -1993,7 +1610,6 @@ class TextScrapingReviewApp(QMainWindow):
         row = manager.get_current_row() if manager is not None else None
         if row is None:
             self.ui.clear_fields()
-            self.ui.set_metric_status("")
             return
 
         idx = manager.current_index
@@ -2015,20 +1631,9 @@ class TextScrapingReviewApp(QMainWindow):
         self.ui.set_reviewer_notes_text(
             self._safe_text(row.get("reviewer_comments", ""))
         )
-        self.ui.set_field_texts({key: row.get(key, "") for key in self.mid_field_keys})
-
-        classes = self.settings.get("evaluationClasses", {}) or {}
-        scheme = self._safe_text(row.get("classification_scheme", "")).strip()
-        if scheme and scheme in classes:
-            self.ui.set_scheme(scheme)
-        elif scheme == "" and self.ui.scheme_name() in classes:
-            pass  # keep whatever the user last selected
-        else:
-            default_name = self.settings.get("defaultClass", "")
-            if default_name in classes:
-                self.ui.set_scheme(default_name)
-
-        self.ui.set_metric_status(self._safe_text(row.get("metric_status", "")))
+        self.ui.set_field_texts(
+            {key: self._safe_text(row.get(key, "")) for key in self.mid_field_keys}
+        )
 
     def _as_int(self, value) -> int:
         try:
@@ -2135,21 +1740,6 @@ class TextScrapingReviewApp(QMainWindow):
     def on_counter_changed(self, key: str, value: int):
         self.update_info_labels()
 
-    def _apply_scheme_settings(self):
-        """Push the configured classification schemes into the sidebar."""
-        self.ui.set_scheme_options(
-            self.settings.get("evaluationClasses", {}) or {},
-            self.settings.get("defaultClass", ""),
-        )
-
-    def on_scheme_changed(self, scheme_name: str):
-        # The sidebar has already rebuilt its options; restore the row's value.
-        row = (
-            self.mid_manager.get_current_row() if hasattr(self, "mid_manager") else None
-        )
-        if row is not None:
-            self.ui.set_metric_status(self._safe_text(row.get("metric_status", "")))
-
     def _safe_text(self, v) -> str:
         if v is None:
             return ""
@@ -2170,7 +1760,7 @@ class TextScrapingReviewApp(QMainWindow):
             self.logger.warning(f"Unknown content transfer target '{target_key}'")
             return
 
-        self.ui.set_field_text(target_key, self._extract_and_apply_status_label(text))
+        self.ui.set_field_text(target_key, text.strip())
         self.ui.focus_field(target_key)
 
     def eventFilter(self, obj, event):
@@ -2184,50 +1774,6 @@ class TextScrapingReviewApp(QMainWindow):
             if event.key() in (Qt.Key_Return, Qt.Key_Enter):
                 return True
         return super().eventFilter(obj, event)
-
-    def _extract_and_apply_status_label(self, snippet: str) -> str:
-        """
-        If snippet contains a classification label, select that radio and remove the label text
-        from the snippet. Returns cleaned snippet.
-        """
-        labels = self.ui.metric_status_labels()
-        if not labels:
-            return snippet
-
-        # Prefer longer labels first (handles labels like "Not Met" vs "Met")
-        labels_sorted = sorted(labels, key=len, reverse=True)
-
-        s = snippet
-
-        # Normalize whitespace for matching without losing the user's original
-        s_norm = re.sub(r"\s+", " ", s).strip()
-
-        for label in labels_sorted:
-            lab = label.strip()
-            if not lab:
-                continue
-
-            # Match label as a standalone token (word boundary-ish), anywhere in string.
-            # This works for multi-word labels.
-            pattern = (
-                r"(?<!\S)" + re.escape(lab) + r"(?!\S)"
-            )  # surrounded by whitespace or ends
-            m = re.search(pattern, s_norm)
-            if not m:
-                continue
-
-            self.ui.set_metric_status(label)
-
-            # Remove that occurrence of the label from the normalized string
-            s_norm = (s_norm[: m.start()] + s_norm[m.end() :]).strip()
-
-            # Stop after the first match
-            break
-
-        # Clean up dangling punctuation at the ends (common when labels are at end)
-        s_norm = s_norm.strip(" \t\r\n-–—:;,.()[]{}")
-
-        return s_norm
 
 
 if __name__ == "__main__":

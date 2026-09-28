@@ -36,9 +36,8 @@ def document_stems(directory) -> list[str]:
     """Every document in ``directory``, without its extension.
 
     Not recursive, because the application does not search subfolders either —
-    it looks for each row's document directly in the data directory. That also
-    keeps the ``accepted`` and ``rejected`` folders the application creates out
-    of the listing, since those are directories rather than files.
+    it looks for each row's document directly in the data directory. Any
+    folders sitting beside the documents are therefore left out too.
 
     Sorted case-insensitively and de-duplicated: two files differing only by
     extension reduce to one row, which is what a MID wants.

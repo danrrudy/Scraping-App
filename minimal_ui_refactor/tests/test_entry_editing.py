@@ -159,6 +159,11 @@ def test_a_new_observation_starts_unedited(manager_factory):
 # Entry label formats
 # ----------------------------------------------------------------------
 LABEL_ROW = {"agency": "DOJ", "year": "2024", "agency_yr": "DOJ-2024.pdf"}
+LABEL_SCHEMA = {"xColumn": "agency", "yColumn": "year", "documentColumn": "agency_yr"}
+
+
+def _label_schema(**overrides):
+    return MIDSchema.from_mapping(dict(LABEL_SCHEMA, **overrides))
 
 
 @pytest.mark.parametrize(
@@ -174,25 +179,23 @@ LABEL_ROW = {"agency": "DOJ", "year": "2024", "agency_yr": "DOJ-2024.pdf"}
     ],
 )
 def test_each_entry_label_format_names_a_row_its_own_way(key, expected):
-    schema = MIDSchema.from_mapping({"entryLabel": key})
-
-    assert schema.observation_label(LABEL_ROW) == expected
+    assert _label_schema(entryLabel=key).observation_label(LABEL_ROW) == expected
 
 
 def test_every_offered_choice_is_a_format_that_works():
     """Nothing may be listed in the dropdown that the schema cannot apply."""
     for key, label in entry_label_choices():
         assert label
-        assert MIDSchema.from_mapping({"entryLabel": key}).observation_label(LABEL_ROW)
+        assert _label_schema(entryLabel=key).observation_label(LABEL_ROW)
 
 
 def test_the_default_keeps_the_label_the_application_always_used():
-    assert MIDSchema.legacy().observation_label(LABEL_ROW) == "DOJ — 2024"
+    assert _label_schema().observation_label(LABEL_ROW) == "DOJ — 2024"
 
 
 def test_an_unknown_stored_format_falls_back_rather_than_failing():
     """Settings files are hand-edited; a typo must not stop the app starting."""
-    schema = MIDSchema.from_mapping({"entryLabel": "no-such-format"})
+    schema = _label_schema(entryLabel="no-such-format")
 
     assert schema.entry_label == "x_dash_y"
     assert schema.observation_label(LABEL_ROW) == "DOJ — 2024"
@@ -200,14 +203,14 @@ def test_an_unknown_stored_format_falls_back_rather_than_failing():
 
 
 def test_a_blank_identifier_does_not_leave_a_stray_separator():
-    schema = MIDSchema.from_mapping({"entryLabel": "x_paren_y"})
+    schema = _label_schema(entryLabel="x_paren_y")
     row = {"agency": "DOJ", "year": "", "agency_yr": "DOJ-2024.pdf"}
 
     assert schema.observation_label(row) == "DOJ"
 
 
 def test_a_row_with_no_identifiers_still_falls_back_to_the_document():
-    schema = MIDSchema.from_mapping({"entryLabel": "x_paren_y"})
+    schema = _label_schema(entryLabel="x_paren_y")
     row = {"agency": "", "year": "", "agency_yr": "DOJ-2024.pdf"}
 
     assert schema.observation_label(row) == "DOJ-2024.pdf"
@@ -434,23 +437,17 @@ def test_the_dialog_previews_the_label_against_the_configured_columns(
     assert preview.text() == "Rows will be labelled: agency (year)"
 
     combo.setCurrentIndex(combo.findData("document"))
-    assert preview.text() == "Rows will be labelled: agency_yr"
+    assert preview.text() == "Rows will be labelled: Filename"
 
 
 @pytest.mark.qt
-def test_the_dialog_opens_on_the_editable_columns_already_configured(
-    mid_schema_dialog,
-):
-    """Reopening the dialog and pressing OK must not clear the selection."""
-    selected = [item.text() for item in mid_schema_dialog.interaction_list.selectedItems()]
+def test_the_dialog_carries_the_configured_fields_across(mid_schema_dialog):
+    """The fields have their own dialog; pressing OK here must not lose them."""
+    schema = mid_schema_dialog.build_schema()
 
-    assert sorted(selected) == ["goal", "metric", "obj", "stratobj"]
-    assert mid_schema_dialog.build_schema().interaction_columns == (
-        "stratobj",
-        "obj",
-        "goal",
-        "metric",
-    )
+    assert schema.interaction_columns == ("stratobj", "obj", "goal", "metric")
+    assert schema.hierarchy_columns == ("stratobj", "obj", "goal", "metric")
+    assert schema.field("stratobj").label == "Strategic Objective"
 
 
 @pytest.mark.qt

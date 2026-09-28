@@ -6,54 +6,13 @@ import pandas as pd
 from logger import setup_logger
 from mid_schema import (
     EDITED_COLUMN,
-    LEGACY_HIERARCHY_COLUMNS,
-    LEGACY_SOURCE_COLUMNS,
+    PAGE_COLUMN,
     MIDSchema,
     WORKFLOW_COLUMN_DEFAULTS,
     clean_value,
+    coerce_page,
     normalize_sheet_name,
 )
-
-# Expected structure for the MID
-# Compatibility exports for legacy plugins/tests. MIDManager no longer requires
-# these columns unless they are selected by the active MIDSchema.
-EXPECTED_COLUMNS = list(LEGACY_SOURCE_COLUMNS)
-
-
-# Ensure columns are properly typecast
-COLUMN_TYPES = {
-    "agency_yr": str,
-    "agency": str,
-    "year": int,
-    "agid": int,
-    "subagency": str,
-    "stratobj": str,
-    "obj": str,
-    "goal": str,
-    "metric": str,
-    "PDF Page Number": str,
-    "Format": str,
-    "Format_Detail": str,
-    "Results_DisplayFormat": str,
-    "Table Name/Word Search Keyword": str,
-    "Other Detail": str,
-    "Format_Type": int,
-    "Format_Type_Updated": int,
-    "_flag": bool,
-    "_achieved": bool,
-    "_aggregate": bool,
-    "_future_dated": bool,
-    "Class": int,
-    "target": str,
-    "actual": str,
-    "years_to_evaluation": str,  # accepts str or int, ints are parsed out internally for consistency
-    "reviewer_status": str,
-    "Page": int,
-    "_edited": bool,
-}
-
-# Heirarchy Definition
-LEVELS = list(LEGACY_HIERARCHY_COLUMNS)
 
 
 class MIDManager:
@@ -64,7 +23,7 @@ class MIDManager:
         will not have the first time they are used.
         """
         self.logger = setup_logger()
-        self.schema = schema or MIDSchema.legacy()
+        self.schema = schema or MIDSchema.default()
         self.boolean_columns = tuple(dict.fromkeys(boolean_columns))
         df = self.load_mid(path, sheet_name)
         self.master_df = df
@@ -120,8 +79,9 @@ class MIDManager:
                 "Values entered in the app are written when you export the MID."
             )
 
-        # Keep generic source values predictable. Domain-specific type coercion
-        # can be added later without making the loader schema-specific again.
+        # Source values stay text: the application does not know what a
+        # project's columns mean, and text is what the sidebar reads and
+        # writes. The workflow columns below are the exception.
         for column in df.columns:
             df[column] = df[column].fillna("").astype(str).str.strip()
 
@@ -144,6 +104,10 @@ class MIDManager:
                     .isin(["true", "1", "yes", "y"])
                 )
 
+        # The page is the one column compared with numbers, so it is the one
+        # column whose type is enforced: an int, or blank.
+        df[PAGE_COLUMN] = df[PAGE_COLUMN].map(coerce_page).astype(object)
+
         return df
 
     def _validate_anchor(self, df):
@@ -165,20 +129,15 @@ class MIDManager:
         )
 
     def _duplicate_mask(self, df):
-        """Rows whose (document, X, Y) identity is shared with another row.
+        """Rows whose identity is shared with another row.
 
         Reported, never fatal: identifiers are assigned inside the app, so a
         MID saved mid-assignment would otherwise refuse to reopen. Rows with
         any blank identity value are unassigned, not duplicates.
-
-        The legacy MID deliberately repeats its identity across hierarchy
-        rows, so it is exempt.
         """
         blank = pd.Series(False, index=df.index)
         columns = list(self.schema.uniqueness_columns)
-        if not columns or self.schema == MIDSchema.legacy():
-            return blank
-        if not self.schema.identifier_columns:
+        if not columns or not self.schema.identifier_columns:
             # Nothing distinguishes observations within a document yet.
             return blank
 
@@ -280,7 +239,7 @@ class MIDManager:
                 new_row[column] = ""
 
         for column, default in WORKFLOW_COLUMN_DEFAULTS.items():
-            if column in new_row and column != "Page":
+            if column in new_row and column != PAGE_COLUMN:
                 new_row[column] = default
 
         new_row["_gen"] = True
@@ -335,10 +294,6 @@ class MIDManager:
         if m is None:
             return None
         return self.master_df.iloc[m]
-        # if self.df is not None and 0 <= self.current_index < len(self.df):
-        #     return self.df.iloc[self.current_index]
-        # else:
-        #     return None
 
     # Allow next_ and prev_mid_entry to run over by 1 so that get_current_row can return None when the end is reached
     def next_mid_entry(self):
@@ -349,20 +304,12 @@ class MIDManager:
         if self.view_indices and self.current_index >= 0:
             self.current_index -= 1
 
-    # def next_mid_entry(self):
-    #     if self.df is not None and self.current_index < len(self.df):
-    #         self.current_index += 1
-
-    # def prev_mid_entry(self):
-    #     if self.df is not None and self.current_index >= 0:
-    #         self.current_index -= 1
-
     def select_mid_entry(self, index=None):
         if self.df is not None and index is not None and 0 <= index < len(self.df):
             self.current_index = index
 
-    # Parse the 'PDF Page Number' field into a list of zero-indexed page numbers
-    # Removes leading p. and expands ranges into a list of integers (inclusive)
+    # Parse the configured page-reference field into a list of zero-indexed
+    # page numbers. Removes leading p. and expands ranges (inclusive).
     def parse_pdf_pages(self, index=None):
         row = self.get_current_row() if index is None else self.df.iloc[index]
         if not self.schema.page_column:
@@ -402,11 +349,6 @@ class MIDManager:
 
         return sorted(set(p for p in pages if p >= 0))
 
-    # Only show the rows passed in as an argument (for dev mode)
-    # def restrict_to_rows(self, row_indices):
-    #     """Restrict MID to a subset of row indices for focused review."""
-    #     self.df = self.df.iloc[row_indices].reset_index(drop=True)
-    #     self.current_index = 0
     def restrict_to_rows(self, row_indices):
         """Restrict MID to a subset of *master* row positions for focused review."""
         # row_indices are master positional indices (iloc positions)
@@ -414,8 +356,9 @@ class MIDManager:
         self.current_index = 0
         self._rebuild_view()
 
-    # Heirarchy Helpers
-
+    # ------------------------------------------------------------------
+    # Hierarchy helpers
+    # ------------------------------------------------------------------
     def get_group_key(self, idx: int) -> tuple[str, str]:
         """Group rows by the configured X/Y observation key."""
         return self.schema.observation_key(self.df.iloc[idx])
@@ -471,128 +414,23 @@ class MIDManager:
         self._rebuild_view()
         return after_pos + 1
 
-    def clone_for_child(self, parent_idx: int, child_level: str) -> dict:
-        """
-        Copy the parent row, clear all levels at or below the child_level.
-        Also mark as generated.
-        """
-        self._require_legacy_hierarchy()
-        parent = self.df.iloc[parent_idx].to_dict()
-        assert child_level in LEVELS, f"Unknown child level: {child_level}"
-        # Determine which keys to clear
-        level_pos = LEVELS.index(child_level)
-        to_clear = LEVELS[level_pos:]  # e.g., child_level='goal' clears goal+metric
-        new_row = parent.copy()
-        for k in to_clear:
-            new_row[k] = ""
-        new_row["_gen"] = True  # mark programmatically generated rows
-        for k in ["metric_status", "target", "actual", "years_to_evaluation"]:
-            if k in new_row:
-                new_row[k] = ""
+    def clone_for_child(self, parent_idx: int, level_column: str) -> dict:
+        """A new row one hierarchy level down from ``parent_idx``.
 
-        if "_achieved" in new_row:
-            new_row["_achieved"] = False
-        if "_future_dated" in new_row:
-            new_row["_future_dated"] = False
+        Copies the parent, keeping the levels above ``level_column`` and
+        clearing that level and every level beneath it, so the user fills in
+        only what is new. Marked as generated and not yet edited.
+        """
+        to_clear = self.schema.hierarchy_below(level_column)
+        if not to_clear:
+            raise ValueError(f"'{level_column}' is not a hierarchy field")
+        new_row = self.df.iloc[parent_idx].to_dict()
+        for column in to_clear:
+            new_row[column] = ""
+        new_row["_gen"] = True  # mark programmatically generated rows
         # A row that has just been created has not been edited by anyone yet.
         new_row[EDITED_COLUMN] = False
         return new_row
-
-    def ensure_gen_flag(self):
-        if "_gen" not in self.master_df.columns:
-            self.master_df["_gen"] = False
-        if "_gen" not in self.df.columns:
-            self.df["_gen"] = False
-
-    def _require_legacy_hierarchy(self):
-        if not self.schema.is_legacy_hierarchy_compatible(self.df.columns):
-            raise ValueError(
-                "This operation belongs to the legacy hierarchy and is not "
-                "available for the configured generic MID."
-            )
-
-    def next_seed_row_index(self, from_idx: int) -> int | None:
-        """
-        Find the next non-generated row after from_idx; return None if none.
-        """
-        self.ensure_gen_flag()
-        for k in range(from_idx + 1, len(self.df)):
-            if not bool(self.df.at[k, "_gen"]):
-                return k
-        return None
-
-    def find_parent_for_goal(self, idx: int) -> int | None:
-        """Find Objective header row (same agency_yr, same SO+OBJ, goal == '')."""
-        self._require_legacy_hierarchy()
-        if idx is None or self.df is None or self.df.empty:
-            return None
-        key = self.get_group_key(idx)
-        so = str(self.df.at[idx, "stratobj"]).strip()
-        obj = str(self.df.at[idx, "obj"]).strip()
-        i = idx
-        while i >= 0 and self.get_group_key(i) == key:
-            if (
-                str(self.df.at[i, "stratobj"]).strip() == so
-                and str(self.df.at[i, "obj"]).strip() == obj
-            ):
-                if str(self.df.at[i, "goal"]).strip() == "":
-                    return i
-            i -= 1
-        return None
-
-    def find_parent_for_obj(self, idx: int) -> int | None:
-        """Find Strategic Objective header row (same agency_yr, same SO, obj == '')."""
-        self._require_legacy_hierarchy()
-        if idx is None or self.df is None or self.df.empty:
-            return None
-        key = self.get_group_key(idx)
-        so = str(self.df.at[idx, "stratobj"]).strip()
-        i = idx
-        while i >= 0 and self.get_group_key(i) == key:
-            if (
-                str(self.df.at[i, "stratobj"]).strip() == so
-                and str(self.df.at[i, "obj"]).strip() == ""
-            ):
-                return i
-            i -= 1
-        return None
-
-    def propagate_flag_from_index(self, idx: int, flagged: bool = True):
-        """
-        Set _flag on the current row and all its descendants within the same agency_yr.
-        Descendants are determined by matching the present parent keys on idx.
-        - If only stratobj is set => flag all rows with same stratobj (this SO and below)
-        - If stratobj+obj set, goal empty => flag same (so,obj) subtree
-        - If stratobj+obj+goal set => flag same (so,obj,goal) subtree
-        """
-        self._require_legacy_hierarchy()
-        if self.df is None or idx is None:
-            return
-        if "_flag" not in self.df.columns:
-            self.df["_flag"] = False
-
-        key = self.get_group_key(idx)
-
-        so = str(self.df.at[idx, "stratobj"]).strip()
-        obj = str(self.df.at[idx, "obj"]).strip()
-        goal = str(self.df.at[idx, "goal"]).strip()
-
-        # Compute match depth
-        def matches(i: int) -> bool:
-            if self.get_group_key(i) != key:
-                return False
-            if so and str(self.df.at[i, "stratobj"]).strip() != so:
-                return False
-            if obj and str(self.df.at[i, "obj"]).strip() != obj:
-                return False
-            if goal and str(self.df.at[i, "goal"]).strip() != goal:
-                return False
-            return True
-
-        # Apply to all rows in this group
-        for i in range(len(self.df)):
-            if matches(i):
-                self.set_value(i, "_flag", flagged)
 
     def delete_current_row(self):
         if self.master_df is None or self.df is None or self.df.empty:
@@ -620,157 +458,116 @@ class MIDManager:
         self._rebuild_view()
 
     def duplicate_prior_year(self, clear_helpers: bool = True) -> int:
-        """
-        For the currently selected row (self.current_index), duplicate the prior year's
-        hierarchy (stratobj/obj/goal/metric) rows into the current agency-year.
+        """Rebuild the current X/Y block from the previous Y's hierarchy.
 
-        - Copies the number of rows and only stratobj/obj/goal/metric from prior year.
-        - Preserves all other fields from the current agency-year template row.
-        - Replaces the entire current agency_yr contiguous block with the new block.
-        - Returns the number of rows created.
+        For the row at ``current_index``, finds the rows with the same X and
+        a Y one less, and replaces the current row's contiguous X/Y block
+        with one row per prior row, each carrying the prior row's hierarchy
+        fields and everything else from the block's first row.
 
-        Raises:
-            ValueError if agency/year not available or prior-year block not found.
+        Returns the number of rows created. Raises ``ValueError`` when the
+        schema cannot support it, the current row's Y is not a number, or no
+        prior block exists.
         """
-        self._require_legacy_hierarchy()
+        schema = self.schema
+        if not schema.supports_prior_year_copy:
+            raise ValueError(
+                "Copying the previous year needs X and Y identifier columns "
+                "and at least one hierarchy field."
+            )
         if self.df is None or self.df.empty:
             raise ValueError("MID is empty; nothing to duplicate.")
-
         if self.current_index is None or not (0 <= self.current_index < len(self.df)):
             raise ValueError("current_index is invalid.")
 
+        x_column, y_column = schema.x_column, schema.y_column
+        hierarchy_cols = list(schema.hierarchy_columns)
+
         cur_row = self.df.iloc[self.current_index]
-        agency = str(cur_row.get("agency", "")).strip()
-        year_raw = cur_row.get("year", None)
-
-        if not agency:
-            raise ValueError("Current row has no 'agency'; cannot locate prior year.")
-
-        try:
-            year = int(str(year_raw).strip())
-        except Exception:
+        x_value = clean_value(cur_row.get(x_column))
+        y_raw = cur_row.get(y_column)
+        if not x_value:
             raise ValueError(
-                f"Current row has invalid 'year' ({year_raw}); cannot locate prior year."
+                f"Current row has no '{x_column}'; cannot locate the prior year."
             )
+        try:
+            y_value = int(clean_value(y_raw))
+        except ValueError:
+            raise ValueError(
+                f"Current row's '{y_column}' ({y_raw!r}) is not a whole number; "
+                "cannot locate the prior year."
+            )
+        prior_y = y_value - 1
 
-        prior_year = year - 1
-
-        # --- Identify current agency_yr contiguous block (template comes from its first row) ---
+        # The template is the first row of the current block: everything the
+        # new rows carry apart from the hierarchy comes from it.
         cur_start, cur_end = self.group_bounds(self.current_index)
         template = self.df.iloc[cur_start].to_dict()
 
-        # --- Find prior-year rows for same agency ---
-        # Prefer exact match on agency+year (more robust than guessing agency_yr string format).
-        prior_mask = (self.df["agency"].astype(str).str.strip() == agency) & (
-            pd.to_numeric(self.df["year"], errors="coerce").fillna(-1).astype(int)
-            == prior_year
+        y_numbers = pd.to_numeric(self.df[y_column], errors="coerce")
+        prior_mask = (self.df[x_column].astype(str).str.strip() == x_value) & (
+            y_numbers == prior_y
         )
         prior_indices = self.df.index[prior_mask].tolist()
         if not prior_indices:
             raise ValueError(
-                f"No prior-year rows found for agency='{agency}', year={prior_year}."
+                f"No prior-year rows found for {x_column}='{x_value}', "
+                f"{y_column}={prior_y}."
             )
 
-        # If there are multiple disjoint blocks for that agency-year, select the block containing the first match
-        # and then expand to its contiguous bounds.
-        prior_seed = int(prior_indices[0])
-        prior_start, prior_end = self.group_bounds(prior_seed)
-
-        # Sanity: ensure the contiguous block is actually the same agency+prior_year throughout.
-        # If not, shrink to only the matching rows within that contiguous range.
-        prior_block = self.df.iloc[prior_start : prior_end + 1].copy()
-        prior_block = prior_block[
-            (prior_block["agency"].astype(str).str.strip() == agency)
-            & (
-                pd.to_numeric(prior_block["year"], errors="coerce")
-                .fillna(-1)
-                .astype(int)
-                == prior_year
-            )
-        ]
-
+        # Take the contiguous block around the first hit, keeping only the
+        # rows in it that really are that X and prior Y.
+        prior_start, prior_end = self.group_bounds(int(prior_indices[0]))
+        prior_block = self.df.iloc[prior_start : prior_end + 1]
+        prior_block = prior_block[prior_mask.iloc[prior_start : prior_end + 1]]
         if prior_block.empty:
             raise ValueError(
-                f"Found prior-year hits, but no coherent block for agency='{agency}', year={prior_year}."
+                f"Found prior-year hits, but no coherent block for "
+                f"{x_column}='{x_value}', {y_column}={prior_y}."
             )
 
-        # Extract the hierarchy fields to copy
-        hierarchy_cols = ["stratobj", "obj", "goal", "metric"]
-        prior_hierarchy = (
-            prior_block[hierarchy_cols].fillna("").astype(str).values.tolist()
-        )
-
-        # --- Build replacement block for current agency-year ---
         new_rows = []
-        for so, obj, goal, metric in prior_hierarchy:
-            r = template.copy()
-            r["agency"] = agency
-            r["year"] = year
-            r["agency_yr"] = (
-                str(template.get("agency_yr", "")).strip()
-                or str(cur_row.get("agency_yr", "")).strip()
-            )
-
-            r["stratobj"] = str(so or "")
-            r["obj"] = str(obj or "")
-            r["goal"] = str(goal or "")
-            r["metric"] = str(metric or "")
-
-            # Mark generated rows (your code already uses _gen in multiple places)
+        for _, prior in prior_block.iterrows():
+            r = dict(template)
+            for column in hierarchy_cols:
+                r[column] = clean_value(prior.get(column))
             r["_gen"] = True
             # A row that has just been created has not been edited by anyone yet.
             r[EDITED_COLUMN] = False
-
             if clear_helpers:
-                # Clear common workflow/helper fields if present; keep non-hierarchy metadata intact.
-                for k in [
-                    "metric_status",
-                    "_flag",
-                    "_achieved",
-                    "_future_dated",
-                    "_no_metrics",
-                ]:
-                    if k in r:
-                        r[k] = "" if k == "metric_status" else False
-
+                # The true/false helper columns: the built-in flag and every
+                # checkbox column, which by convention start with "_".
+                for column in ("_flag", *self.boolean_columns):
+                    if column in r and column.startswith("_"):
+                        r[column] = False
             new_rows.append(r)
 
-        # --- Replace the current block in-place (preserve overall row ordering) ---
-
+        # Replace the current block in place, preserving the overall order.
         master_start = self._master_pos(cur_start)
         master_end = self._master_pos(cur_end)
-
-        top = self.master_df.iloc[: master_start + 1].copy()
-        bottom = self.master_df.iloc[master_end + 1 :].copy()
+        top = self.master_df.iloc[:master_start]
+        bottom = self.master_df.iloc[master_end + 1 :]
         replacement = pd.DataFrame(new_rows)
-
-        # top = self.master_df.iloc[: insert_after_master + 1]
-        # bottom = self.master_df.iloc[insert_after_master + 1 :]
-        # self.master_df = pd.concat([top, pd.DataFrame([new_row]), bottom], ignore_index=True)
-
         self.master_df = pd.concat([top, replacement, bottom], ignore_index=True)
-        self.logger.debug(f"view indices before insertion: {self.view_indices}")
-        self.logger.debug(
-            f"master_df indices after insertion: {self.master_df.index.tolist()}"
-        )
+
+        removed = master_end - master_start + 1
+        shift = len(replacement) - removed
         self.view_indices = [
-            (i + len(replacement)) if i >= master_end else i for i in self.view_indices
+            i + shift if i > master_end else i
+            for i in self.view_indices
+            if not (master_start <= i <= master_end)
         ]
+        for offset in range(len(replacement)):
+            self.view_indices.insert(cur_start + offset, master_start + offset)
 
-        for i in list(range(len(replacement))):
-            new_master_pos = master_start + i
-            self.view_indices.insert(master_start + i, new_master_pos)
-
-        self.logger.debug(
-            f"Shifted view indices after master replacement: {self.view_indices}"
-        )
         # Put cursor on the first row of the rebuilt block
         self.current_index = cur_start
-
+        self._modified = True
         self._rebuild_view()
 
         self.logger.info(
-            f"Added {len(new_rows)} rows by duplicating prior year for agency='{agency}', year={year}."
+            f"Added {len(new_rows)} rows by duplicating the prior year for "
+            f"{x_column}='{x_value}', {y_column}={y_value}."
         )
         return len(new_rows)
 
@@ -804,7 +601,7 @@ class MIDManager:
             self.current_index = 0
             return
         if not self.view_indices:
-            self.logger.warning("view indices undefined, returning masteer df")
+            self.logger.warning("view indices undefined, returning empty view")
             self.df = self.master_df.iloc[0:0].copy()
             self.current_index = 0
             return
@@ -818,6 +615,8 @@ class MIDManager:
     def set_value(self, view_pos: int, col: str, value):
         if self.master_df is None or self.df is None:
             return
+        if col == PAGE_COLUMN:
+            value = coerce_page(value)
         mpos = self._master_pos(view_pos)
         # Committing the sidebar rewrites every field on every navigation, so
         # only a real change counts as an unsaved edit.
@@ -854,11 +653,11 @@ class MIDManager:
         dtype, and that dtype refuses a non-string scalar outright. pandas 2
         silently widened such a column to ``object`` instead.
 
-        A MID column legitimately holds both: ``Page`` is declared an ``int``
-        in :data:`COLUMN_TYPES`, but the column is created empty and so is
-        typed as text until the first page number lands in it. Rather than
-        pin the application to pandas 2, widen the column ourselves and carry
-        on, which is what pandas 2 did on our behalf.
+        A MID column legitimately holds both: a user-defined counter column
+        is created empty, and so is typed as text until the first number
+        lands in it. Rather than pin the application to pandas 2, widen the
+        column ourselves and carry on, which is what pandas 2 did on our
+        behalf.
         """
         try:
             frame.at[row_label, col] = value

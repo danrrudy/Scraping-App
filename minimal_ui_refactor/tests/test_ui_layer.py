@@ -29,7 +29,9 @@ def ui_context():
         mode="user",
         fields=(
             FieldSpec("goal", "Goal"),
-            FieldSpec("metric", "Metric", expandable=True),
+            FieldSpec("metric", "Metric", expandable=True, add_shortcut="F2"),
+            FieldSpec("status", "Status", kind="radio", options=("Met", "Not Met")),
+            FieldSpec("kind", "Kind", kind="dropdown", options=("A", "B")),
         ),
         toggles=(
             ToggleSpec("flag", "Flag for review", shortcut="Ctrl+F"),
@@ -46,8 +48,7 @@ def ui_context():
         ),
         info=(InfoSpec("x", "Agency"), InfoSpec("y", "Year")),
         restriction_options=("none", "_flag"),
-        evaluation_classes={"Performance": {"option_types": ["Met", "Not Met"]}},
-        default_class="Performance",
+        prior_year_copy=True,
     )
 
 
@@ -75,9 +76,15 @@ def test_sidebar_round_trips_every_editable_value(sidebar):
     sidebar.set_reviewer_notes_text("A review")
     sidebar.set_toggles({"flag": True, "achieved": True})
     sidebar.set_counter("future_dated", 4)
-    sidebar.set_metric_status("Not Met")
+    sidebar.set_field_text("status", "Not Met")
+    sidebar.set_field_text("kind", "B")
 
-    assert sidebar.field_texts() == {"goal": "A goal", "metric": "A metric"}
+    assert sidebar.field_texts() == {
+        "goal": "A goal",
+        "metric": "A metric",
+        "status": "Not Met",
+        "kind": "B",
+    }
     assert sidebar.notes_text() == "A note"
     assert sidebar.reviewer_notes_text() == "A review"
     assert sidebar.toggles() == {
@@ -87,7 +94,6 @@ def test_sidebar_round_trips_every_editable_value(sidebar):
         "future_dated": False,
     }
     assert sidebar.counters() == {"future_dated": 4}
-    assert sidebar.metric_status() == "Not Met"
 
 
 @pytest.mark.qt
@@ -95,9 +101,12 @@ def test_sidebar_presenters_do_not_re_emit_signals(sidebar):
     emitted = []
     sidebar.toggleChanged.connect(lambda key, checked: emitted.append(key))
     sidebar.counterChanged.connect(lambda key, value: emitted.append(key))
+    sidebar.userEdited.connect(lambda: emitted.append("edited"))
 
     sidebar.set_toggle("flag", True)
     sidebar.set_counter("future_dated", 2)
+    sidebar.set_field_text("status", "Met")
+    sidebar.set_field_text("kind", "A")
 
     assert emitted == []
 
@@ -136,15 +145,19 @@ def test_tab_walks_the_sidebar_inputs_in_visual_order(sidebar):
     widgets = sidebar.focus_widgets()
 
     assert widgets[:2] == [
-        sidebar.field_editors["goal"],
-        sidebar.field_editors["metric"],
+        sidebar.field_widget("goal"),
+        sidebar.field_widget("metric"),
     ]
+    # Each radio is its own stop, and the list is one.
+    status = sidebar.field_editors["status"]
+    assert widgets[2:4] == list(status.buttons.values())
+    assert widgets[4] is sidebar.field_widget("kind")
     assert sidebar.notes_edit in widgets
     assert sidebar.reviewer_notes_edit == widgets[-1]
 
     # Tab must move focus rather than insert a tab character.
-    for editor in sidebar.field_editors.values():
-        assert editor.tabChangesFocus()
+    for key in ("goal", "metric"):
+        assert sidebar.field_widget(key).tabChangesFocus()
 
     # A counter follows the checkbox that owns it.
     order = {widget: index for index, widget in enumerate(widgets)}
@@ -165,18 +178,27 @@ def test_a_computed_button_sits_beside_the_field_it_writes(sidebar, qtbot):
 
 
 @pytest.mark.qt
-def test_scheme_change_rebuilds_the_metric_status_options(sidebar):
-    assert sidebar.metric_status_labels() == ["Met", "Not Met"]
+def test_a_radio_field_can_be_cleared_and_reports_only_user_changes(sidebar, qtbot):
+    status = sidebar.field_editors["status"]
+    sidebar.set_field_text("status", "Met")
+    assert sidebar.field_text("status") == "Met"
 
-    sidebar.set_scheme_options(
-        {"Binary": {"option_types": ["Yes", "No", "Partial"]}}, "Binary"
-    )
-    assert sidebar.metric_status_labels() == ["Yes", "No", "Partial"]
+    with qtbot.waitSignal(sidebar.userEdited):
+        status.buttons["Not Met"].click()
+    assert sidebar.field_text("status") == "Not Met"
 
-    sidebar.select_metric_status_by_index(2)
-    assert sidebar.metric_status() == "Partial"
-    sidebar.clear_metric_status()
-    assert sidebar.metric_status() == ""
+    with qtbot.waitSignal(sidebar.userEdited):
+        status.clear_button.click()
+    assert sidebar.field_text("status") == ""
+
+
+@pytest.mark.qt
+def test_a_dropdown_field_shows_a_value_its_options_lack(sidebar):
+    sidebar.set_field_text("kind", "C")
+
+    assert sidebar.field_text("kind") == "C"
+    sidebar.set_field_text("kind", "")
+    assert sidebar.field_text("kind") == ""
 
 
 @pytest.mark.qt
@@ -191,7 +213,6 @@ def test_mode_visibility_follows_the_declared_control_modes(sidebar):
 
     sidebar.apply_mode("dev")
     assert controls["run_audit"].isVisible()
-    assert controls["export_results"].isVisible()
     assert not sidebar.reviewer_group.isVisible()
 
     sidebar.apply_mode("reviewer")
@@ -203,6 +224,7 @@ def test_mode_visibility_follows_the_declared_control_modes(sidebar):
 @pytest.mark.qt
 def test_expandable_fields_get_an_add_button_and_others_do_not(sidebar, qtbot):
     assert set(sidebar.add_level_buttons) == {"metric"}
+    assert sidebar.add_level_buttons["metric"].shortcut().toString() == "F2"
 
     with qtbot.waitSignal(sidebar.addLevelRequested) as blocker:
         sidebar.trigger_add_level("metric")
@@ -210,7 +232,7 @@ def test_expandable_fields_get_an_add_button_and_others_do_not(sidebar, qtbot):
 
 
 @pytest.mark.qt
-def test_transfer_targets_are_the_editable_fields(sidebar):
+def test_transfer_targets_are_the_text_fields(sidebar):
     assert sidebar.transfer_targets() == [("goal", "Goal"), ("metric", "Metric")]
 
 
@@ -308,10 +330,9 @@ def test_selection_transfers_from_the_content_panel_into_a_field(application_fac
     window.ui.set_content("The agency reported a goal of 42 widgets.")
     window.ui.content_panel.editor.selectAll()
 
-    # MID fields go through status-label extraction, which trims trailing
-    # punctuation left behind when a label sits at the end of the snippet.
+    # The selection lands as it was, apart from surrounding whitespace.
     window.ui.transfer_selection("goal")
-    assert window.ui.field_text("goal") == "The agency reported a goal of 42 widgets"
+    assert window.ui.field_text("goal") == "The agency reported a goal of 42 widgets."
 
 
 @pytest.mark.qt
@@ -519,13 +540,13 @@ def test_the_sidebar_compresses_instead_of_scrolling(application_factory, qtbot)
     window.resize(1600, 1000)
     qtbot.wait(60)
     QApplication.processEvents()
-    tall_editor = next(iter(window.ui.left.field_editors.values())).height()
+    tall_editor = next(iter(window.ui.left.field_editors.values())).widget.height()
     assert not window.ui.left_scroll.verticalScrollBar().isVisible()
 
     window.resize(1600, 860)
     qtbot.wait(60)
     QApplication.processEvents()
-    short_editor = next(iter(window.ui.left.field_editors.values())).height()
+    short_editor = next(iter(window.ui.left.field_editors.values())).widget.height()
 
     assert short_editor < tall_editor, "the fields did not compress"
     assert not window.ui.left_scroll.verticalScrollBar().isVisible()
@@ -549,7 +570,7 @@ def test_the_scrollbar_appears_once_compressing_is_not_enough(
 
     assert window.ui.left_scroll.verticalScrollBar().isVisible()
     # And the fields are back to a usable height rather than crushed.
-    editor = next(iter(window.ui.left.field_editors.values()))
+    editor = next(iter(window.ui.left.field_editors.values())).widget
     assert editor.height() > FIELD_BOX_MIN_HEIGHT
 
 
@@ -568,5 +589,5 @@ def test_a_field_is_never_squeezed_below_a_readable_line(
         window.resize(1600, height)
         qtbot.wait(40)
         QApplication.processEvents()
-        for editor in window.ui.left.field_editors.values():
+        for editor in (e.widget for e in window.ui.left.field_editors.values()):
             assert editor.height() >= FIELD_BOX_MIN_HEIGHT
