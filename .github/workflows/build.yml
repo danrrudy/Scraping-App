@@ -5,7 +5,7 @@ name: Build
 # workflow exists to get a macOS build without owning a Mac.
 #
 # Every run uploads installable archives as workflow artifacts. Pushing a tag
-# like v1.1.0 additionally attaches them to a GitHub release.
+# like v0.2.0 additionally attaches them to a GitHub release.
 
 on:
   push:

@@ -208,7 +208,7 @@ packaged.
 To cut a release: bump `__version__` in `version.py`, commit, then
 
 ```bash
-git tag v1.1.0 && git push origin v1.1.0
+git tag v0.2.0 && git push origin v0.2.0
 ```
 
 ---
