@@ -1,16 +1,30 @@
 # mid_manager.py
 
-import pandas as pd
 import re
-from logger import setup_logger
 
+import pandas as pd
+from logger import setup_logger
 
 # Expected structure for the MID
 EXPECTED_COLUMNS = [
-    "agency_yr", "agency", "year", "agid", "subagency", "stratobj",
-    "obj", "goal", "metric", "PDF Page Number", "Format", "Format_Detail",
-    "Results_DisplayFormat", "Table Name/Word Search Keyword",
-    "Other Detail", "Format_Type", "Format_Type_Updated"
+    "agency_yr",
+    "agency",
+    "year",
+    "agid",
+    "subagency",
+    "stratobj",
+    "obj",
+    "goal",
+    "metric",
+    "PDF Page Number",
+    "Format",
+    "Format_Detail",
+    "Results_DisplayFormat",
+    "Table Name/Word Search Keyword",
+    "Other Detail",
+    "Format_Type",
+    "Format_Type_Updated",
+    "Page",
 ]
 
 
@@ -40,13 +54,13 @@ COLUMN_TYPES = {
     "Class": int,
     "target": str,
     "actual": str,
-    "years_to_evaluation": str,             # accepts str or int, ints are parsed out internally for consistency
+    "years_to_evaluation": str,  # accepts str or int, ints are parsed out internally for consistency
     "reviewer_status": str,
+    "Page": int,
 }
 
 # Heirarchy Definition
 LEVELS = ["stratobj", "obj", "goal", "metric"]
-
 
 
 class MIDManager:
@@ -62,7 +76,9 @@ class MIDManager:
     def load_mid(self, path, sheet_name=0):
         """Loads and validates the Master Input Document (MID) Excel file."""
         try:
-            df = pd.read_excel(path, sheet_name=sheet_name, dtype=str, keep_default_na=False)  # Read all as string first
+            df = pd.read_excel(
+                path, sheet_name=sheet_name, dtype=str, keep_default_na=False
+            )  # Read all as string first
         except Exception as e:
             raise RuntimeError(f"Failed to load MID file: {e}")
 
@@ -75,14 +91,18 @@ class MIDManager:
             if col in df.columns:
                 try:
                     if col_type is int:
-                        df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
+                        df[col] = pd.to_numeric(df[col], errors="coerce").astype(
+                            "Int64"
+                        )
                     elif col_type is bool:
                         df[col] = df[col].astype(str).str.strip() == "True"
                     else:
                         df[col] = df[col].fillna("").astype(str).str.strip()
 
                 except Exception as e:
-                    raise ValueError(f"Failed to cast column '{col}' to {col_type}: {e}")
+                    raise ValueError(
+                        f"Failed to cast column '{col}' to {col_type}: {e}"
+                    )
 
         return df
 
@@ -105,8 +125,6 @@ class MIDManager:
         if self.view_indices and self.current_index >= 0:
             self.current_index -= 1
 
-
-
     # def next_mid_entry(self):
     #     if self.df is not None and self.current_index < len(self.df):
     #         self.current_index += 1
@@ -127,7 +145,9 @@ class MIDManager:
         page_field = str(row.get("PDF Page Number", "")).strip()
 
         if not page_field:
-            self.logger.warning(f"No page field listed for {row.get("agency_yr","")} on line {str(index)}")
+            self.logger.warning(
+                f"No page field listed for {row.get('agency_yr', '')} on line {str(index)}"
+            )
             return []
 
         self.logger.debug(f"parsing {page_field}")
@@ -139,15 +159,17 @@ class MIDManager:
         try:
             # Match comma-separated values like "p.3, p.5-7"
             for part in re.split(r"[,\s]+", page_field):
-                if '-' in part:
-                    start, end = map(int, part.split('-'))
+                if "-" in part:
+                    start, end = map(int, part.split("-"))
                     pages.extend(range(start - 1, end))  # zero-indexed
                     self.logger.debug(f"Page range: {start} - {end}")
                 elif part.isdigit():
                     pages.append(int(part) - 1)
                     self.logger.debug(f"Single page: {int(part)}")
         except Exception as e:
-            self.logger.warning(f"Failed to parse page numbers from '{page_field}': {e}")
+            self.logger.warning(
+                f"Failed to parse page numbers from '{page_field}': {e}"
+            )
             return []
 
         return sorted(set(p for p in pages if p >= 0))
@@ -164,11 +186,7 @@ class MIDManager:
         self.current_index = 0
         self._rebuild_view()
 
-
-
     # Heirarchy Helpers
-
-
 
     def get_group_key(self, idx: int) -> str:
         """Group rows by the agency_yr string."""
@@ -207,14 +225,15 @@ class MIDManager:
         insert_after_master = self._master_pos(after_pos)
         top = self.master_df.iloc[: insert_after_master + 1]
         bottom = self.master_df.iloc[insert_after_master + 1 :]
-        self.master_df = pd.concat([top, pd.DataFrame([new_row]), bottom], ignore_index=True)
+        self.master_df = pd.concat(
+            [top, pd.DataFrame([new_row]), bottom], ignore_index=True
+        )
 
         new_master_pos = insert_after_master + 1
 
         # shift existing mapped indices that occur after insertion
         self.view_indices = [
-            (i + 1) if i >= new_master_pos else i
-            for i in self.view_indices
+            (i + 1) if i >= new_master_pos else i for i in self.view_indices
         ]
 
         # insert new row into the view right after after_pos
@@ -222,7 +241,6 @@ class MIDManager:
 
         self._rebuild_view()
         return after_pos + 1
-
 
     def clone_for_child(self, parent_idx: int, child_level: str) -> dict:
         """
@@ -242,8 +260,10 @@ class MIDManager:
             if k in new_row:
                 new_row[k] = ""
 
-        if "_achieved" in new_row: new_row["_achieved"] = False
-        if "_future_dated" in new_row: new_row["_future_dated"] = False
+        if "_achieved" in new_row:
+            new_row["_achieved"] = False
+        if "_future_dated" in new_row:
+            new_row["_future_dated"] = False
         return new_row
 
     def ensure_gen_flag(self):
@@ -262,13 +282,17 @@ class MIDManager:
 
     def find_parent_for_goal(self, idx: int) -> int | None:
         """Find Objective header row (same agency_yr, same SO+OBJ, goal == '')."""
-        if idx is None or self.df is None or self.df.empty: return None
+        if idx is None or self.df is None or self.df.empty:
+            return None
         key = self.get_group_key(idx)
         so = str(self.df.at[idx, "stratobj"]).strip()
         obj = str(self.df.at[idx, "obj"]).strip()
         i = idx
         while i >= 0 and str(self.df.at[i, "agency_yr"]) == key:
-            if str(self.df.at[i, "stratobj"]).strip() == so and str(self.df.at[i, "obj"]).strip() == obj:
+            if (
+                str(self.df.at[i, "stratobj"]).strip() == so
+                and str(self.df.at[i, "obj"]).strip() == obj
+            ):
                 if str(self.df.at[i, "goal"]).strip() == "":
                     return i
             i -= 1
@@ -276,12 +300,16 @@ class MIDManager:
 
     def find_parent_for_obj(self, idx: int) -> int | None:
         """Find Strategic Objective header row (same agency_yr, same SO, obj == '')."""
-        if idx is None or self.df is None or self.df.empty: return None
+        if idx is None or self.df is None or self.df.empty:
+            return None
         key = self.get_group_key(idx)
         so = str(self.df.at[idx, "stratobj"]).strip()
         i = idx
         while i >= 0 and str(self.df.at[i, "agency_yr"]) == key:
-            if str(self.df.at[i, "stratobj"]).strip() == so and str(self.df.at[i, "obj"]).strip() == "":
+            if (
+                str(self.df.at[i, "stratobj"]).strip() == so
+                and str(self.df.at[i, "obj"]).strip() == ""
+            ):
                 return i
             i -= 1
         return None
@@ -294,14 +322,15 @@ class MIDManager:
         - If stratobj+obj set, goal empty => flag same (so,obj) subtree
         - If stratobj+obj+goal set => flag same (so,obj,goal) subtree
         """
-        if self.df is None or idx is None: return
+        if self.df is None or idx is None:
+            return
         if "_flag" not in self.df.columns:
             self.df["_flag"] = False
 
         key = self.get_group_key(idx)
 
-        so   = str(self.df.at[idx, "stratobj"]).strip()
-        obj  = str(self.df.at[idx, "obj"]).strip()
+        so = str(self.df.at[idx, "stratobj"]).strip()
+        obj = str(self.df.at[idx, "obj"]).strip()
         goal = str(self.df.at[idx, "goal"]).strip()
 
         # Always flag current row
@@ -333,21 +362,20 @@ class MIDManager:
         del_master_pos = self._master_pos(self.current_index)
 
         # delete from master
-        self.master_df = self.master_df.drop(self.master_df.index[del_master_pos]).reset_index(drop=True)
+        self.master_df = self.master_df.drop(
+            self.master_df.index[del_master_pos]
+        ).reset_index(drop=True)
 
         # remove from view mapping and shift indices after deleted row
         del self.view_indices[self.current_index]
         self.view_indices = [
-            (i - 1) if i > del_master_pos else i
-            for i in self.view_indices
+            (i - 1) if i > del_master_pos else i for i in self.view_indices
         ]
 
         if self.current_index >= len(self.view_indices):
             self.current_index = max(0, len(self.view_indices) - 1)
 
         self._rebuild_view()
-
-
 
     def duplicate_prior_year(self, clear_helpers: bool = True) -> int:
         """
@@ -378,7 +406,9 @@ class MIDManager:
         try:
             year = int(str(year_raw).strip())
         except Exception:
-            raise ValueError(f"Current row has invalid 'year' ({year_raw}); cannot locate prior year.")
+            raise ValueError(
+                f"Current row has invalid 'year' ({year_raw}); cannot locate prior year."
+            )
 
         prior_year = year - 1
 
@@ -389,11 +419,14 @@ class MIDManager:
         # --- Find prior-year rows for same agency ---
         # Prefer exact match on agency+year (more robust than guessing agency_yr string format).
         prior_mask = (self.df["agency"].astype(str).str.strip() == agency) & (
-            pd.to_numeric(self.df["year"], errors="coerce").fillna(-1).astype(int) == prior_year
+            pd.to_numeric(self.df["year"], errors="coerce").fillna(-1).astype(int)
+            == prior_year
         )
         prior_indices = self.df.index[prior_mask].tolist()
         if not prior_indices:
-            raise ValueError(f"No prior-year rows found for agency='{agency}', year={prior_year}.")
+            raise ValueError(
+                f"No prior-year rows found for agency='{agency}', year={prior_year}."
+            )
 
         # If there are multiple disjoint blocks for that agency-year, select the block containing the first match
         # and then expand to its contiguous bounds.
@@ -405,15 +438,24 @@ class MIDManager:
         prior_block = self.df.iloc[prior_start : prior_end + 1].copy()
         prior_block = prior_block[
             (prior_block["agency"].astype(str).str.strip() == agency)
-            & (pd.to_numeric(prior_block["year"], errors="coerce").fillna(-1).astype(int) == prior_year)
+            & (
+                pd.to_numeric(prior_block["year"], errors="coerce")
+                .fillna(-1)
+                .astype(int)
+                == prior_year
+            )
         ]
 
         if prior_block.empty:
-            raise ValueError(f"Found prior-year hits, but no coherent block for agency='{agency}', year={prior_year}.")
+            raise ValueError(
+                f"Found prior-year hits, but no coherent block for agency='{agency}', year={prior_year}."
+            )
 
         # Extract the hierarchy fields to copy
         hierarchy_cols = ["stratobj", "obj", "goal", "metric"]
-        prior_hierarchy = prior_block[hierarchy_cols].fillna("").astype(str).values.tolist()
+        prior_hierarchy = (
+            prior_block[hierarchy_cols].fillna("").astype(str).values.tolist()
+        )
 
         # --- Build replacement block for current agency-year ---
         new_rows = []
@@ -421,7 +463,10 @@ class MIDManager:
             r = template.copy()
             r["agency"] = agency
             r["year"] = year
-            r["agency_yr"] = str(template.get("agency_yr", "")).strip() or str(cur_row.get("agency_yr", "")).strip()
+            r["agency_yr"] = (
+                str(template.get("agency_yr", "")).strip()
+                or str(cur_row.get("agency_yr", "")).strip()
+            )
 
             r["stratobj"] = str(so or "")
             r["obj"] = str(obj or "")
@@ -433,7 +478,13 @@ class MIDManager:
 
             if clear_helpers:
                 # Clear common workflow/helper fields if present; keep non-hierarchy metadata intact.
-                for k in ["metric_status", "_flag", "_achieved", "_future_dated", "_no_metrics"]:
+                for k in [
+                    "metric_status",
+                    "_flag",
+                    "_achieved",
+                    "_future_dated",
+                    "_no_metrics",
+                ]:
                     if k in r:
                         r[k] = "" if k == "metric_status" else False
 
@@ -444,10 +495,9 @@ class MIDManager:
         master_start = self._master_pos(cur_start)
         master_end = self._master_pos(cur_end)
 
-        top = self.master_df.iloc[:master_start+1].copy()
+        top = self.master_df.iloc[: master_start + 1].copy()
         bottom = self.master_df.iloc[master_end + 1 :].copy()
         replacement = pd.DataFrame(new_rows)
-
 
         # top = self.master_df.iloc[: insert_after_master + 1]
         # bottom = self.master_df.iloc[insert_after_master + 1 :]
@@ -455,23 +505,28 @@ class MIDManager:
 
         self.master_df = pd.concat([top, replacement, bottom], ignore_index=True)
         self.logger.debug(f"view indices before insertion: {self.view_indices}")
-        self.logger.debug(f"master_df indices after insertion: {self.master_df.index.tolist()}")
+        self.logger.debug(
+            f"master_df indices after insertion: {self.master_df.index.tolist()}"
+        )
         self.view_indices = [
-            (i + len(replacement)) if i >= master_end else i
-            for i in self.view_indices
+            (i + len(replacement)) if i >= master_end else i for i in self.view_indices
         ]
 
         for i in list(range(len(replacement))):
             new_master_pos = master_start + i
             self.view_indices.insert(master_start + i, new_master_pos)
 
-        self.logger.debug(f"Shifted view indices after master replacement: {self.view_indices}")
+        self.logger.debug(
+            f"Shifted view indices after master replacement: {self.view_indices}"
+        )
         # Put cursor on the first row of the rebuilt block
         self.current_index = cur_start
 
         self._rebuild_view()
 
-        self.logger.info(f"Added {len(new_rows)} rows by duplicating prior year for agency='{agency}', year={year}.")
+        self.logger.info(
+            f"Added {len(new_rows)} rows by duplicating prior year for agency='{agency}', year={year}."
+        )
         return len(new_rows)
 
     def clear_restriction(self, mid_path: str = "", sheet_name: str = 0):
@@ -480,11 +535,11 @@ class MIDManager:
             # fallback: if somehow master_df missing, reload
             if mid_path:
                 self.master_df = self.load_mid(mid_path, sheet_name)
-        self.view_indices = list(range(len(self.master_df))) if self.master_df is not None else []
+        self.view_indices = (
+            list(range(len(self.master_df))) if self.master_df is not None else []
+        )
         self.current_index = 0
         self._rebuild_view()
-
-
 
     def _master_pos(self, view_pos: int | None = None) -> int | None:
         if view_pos is None:
@@ -509,7 +564,9 @@ class MIDManager:
             self.current_index = 0
             return
         self.df = self.master_df.iloc[self.view_indices].reset_index(drop=True)
-        self.logger.debug(f"Rebuilding view with master df of length {len(self.master_df)} and view indices: {len(self.view_indices)}")
+        self.logger.debug(
+            f"Rebuilding view with master df of length {len(self.master_df)} and view indices: {len(self.view_indices)}"
+        )
         if self.current_index >= len(self.df):
             self.current_index = max(0, len(self.df) - 1)
 
@@ -519,7 +576,3 @@ class MIDManager:
         mpos = self._master_pos(view_pos)
         self.master_df.at[mpos, col] = value
         self.df.at[view_pos, col] = value
-
-
-
-

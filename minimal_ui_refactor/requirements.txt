@@ -1,0 +1,9 @@
+# Core application dependencies.
+# Scraper plugins may need more (OCR, table detection, ML models); install
+# those alongside the plugin rather than here.
+PyQt5>=5.15
+pandas>=2.0
+PyMuPDF>=1.24
+Pillow>=10.0
+openpyxl>=3.1
+XlsxWriter>=3.1

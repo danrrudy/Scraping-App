@@ -1,7 +1,28 @@
-data/*
+# Working data — patterns without a leading path apply at any depth, so
+# nested copies (e.g. minimal_ui_refactor/data) are covered too.
+data/
+logs/
 *.pdf
 *.xlsx
 *.log
 user_settings.json
 page_13.jpg
 table_scraper_PIPELINE.py
+
+# Python and test artifacts
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Crash dumps left behind by the shell
+*.stackdump
+
+# Build output
+build/
+dist/
+*.spec.bak
+
+# Plugin folders seeded into a source checkout at first run; the shipped
+# copies live in minimal_ui_refactor/bundled/
+minimal_ui_refactor/scrapers/
+minimal_ui_refactor/extractors/
