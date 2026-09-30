@@ -1,0 +1,8 @@
+PyQt5
+pandas
+PyMuPDF
+Pillow
+pytesseract
+torch
+transformers
+openpyxl

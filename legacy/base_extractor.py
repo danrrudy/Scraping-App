@@ -2,17 +2,12 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
-DEFAULT_ALLOWED_FIELDS = {
-    "stratobj", "obj", "goal", "metric", "target", "actual", "status"
-}
+_ALLOWED_FIELDS = {"stratobj", "obj", "goal", "metric", "target", "actual", "status"}
 
 class BaseExtractor(ABC):
     def __init__(self, scrape_output, metadata=None):
         self.scrape_output = scrape_output
         self.metadata = metadata or {}
-        configured_fields = self.metadata.get("allowed_fields", DEFAULT_ALLOWED_FIELDS)
-        self.allowed_fields = {str(field) for field in configured_fields}
-        self.allowed_fields.add("status")
 
         # NEW: canonical output
         self._records: Optional[List[Dict[str, str]]] = None
@@ -36,10 +31,9 @@ class BaseExtractor(ABC):
 
             clean: Dict[str, str] = {}
             for k, v in rec.items():
-                if k not in self.allowed_fields:
+                if k not in _ALLOWED_FIELDS:
                     raise ValueError(
-                        f"Record {i} has invalid key '{k}'. "
-                        f"Allowed: {sorted(self.allowed_fields)}"
+                        f"Record {i} has invalid key '{k}'. Allowed: {sorted(_ALLOWED_FIELDS)}"
                     )
                 if v is None:
                     clean[k] = ""

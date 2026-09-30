@@ -5,7 +5,7 @@ release workflow that names the artifacts. Change it here and everything
 downstream follows.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 #: What the window, the executable, and the macOS bundle are called.
 APP_NAME = "Document Review Tool"

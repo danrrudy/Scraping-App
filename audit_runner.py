@@ -1,318 +1,279 @@
-# audit_runner.py
+"""Structured audit support for configured MID schemas."""
 
-import os
+from __future__ import annotations
+
 import json
+from collections import Counter, defaultdict
+from pathlib import Path
+
 import fitz
-import re
-import pandas as pd
+
+import paths
 from logger import setup_logger
+from mid_schema import clean_value, safe_filename_stem
 from scraper_loader import load_scraper_class
 
 
-def run_mid_audit(mid_manager, settings):
-    logger = setup_logger()
-    logger.info("Starting structured MID audit")
-        # Create output folder
-    output_dir = os.path.join("logs", "table_detections")
-    os.makedirs(output_dir, exist_ok=True)
-
-    total_rows = len(mid_manager.df)
-    results = []
-    summary = {
-        "total_entries": total_rows,
-        "status_counts": {"PASS": 0, "FAIL": 0},
-        "test_failures": {},  # test_name -> failure count
-        "failures_by_agency": {},  # agency -> { year -> [failed_test1, ...]}
-        "outcomes_by_format_type": {},  # format_type -> {"PASS": x, "FAIL": y, "failed tests": { test_name: count}}
-    }
+TABLE_FORMAT_TYPES = {str(value) for value in range(1, 19)}
 
 
-    # Define test suite
-    def test_pdf_found(row, doc, page_indices, settings):
-        return doc is not None
+def _scraper_path(filename):
+    """A scraper the audit expects to find in the installation's plugin folder.
 
-    def test_pages_parsed(row, doc, page_indices, settings):
-        return bool(page_indices)
+    Not ``__file__``: a frozen build's own directory is read-only and holds no
+    plugins, so the audit looks where the user's scrapers actually live.
+    """
+    return Path(paths.app_dir()) / "scrapers" / filename
 
-    def test_text_scraped(row, doc, page_indices, settings):
-        if not page_indices:
-            return False
 
-        scraper_path = os.path.join(os.path.dirname(__file__), "scrapers", "text_scraper.py")
-        ScraperClass = load_scraper_class(scraper_path)
+def _load_text_scraper():
+    return load_scraper_class(str(_scraper_path("text_scraper.py")))
 
-        for page_num in page_indices:
-            try:
-                page = doc.load_page(page_num)
-                scraper = ScraperClass(page)
-                scraper.scrape()
-                result = scraper.result
-                text = bool(result.get("text", [])[0].strip())
-                if not text:
-                    return False    # Fail on first non-scraped page
-            except Exception as e:
-                logger.warning(f"text_scraped error on page {page_num+1} for {row.get('agency_yr')}: {e}")
-                return False
 
-        return True # Only reached if all pages returned valid text
+def _load_table_scraper():
+    return load_scraper_class(str(_scraper_path("table_scraper.py")))
 
-    def test_keyword_match(row, doc, page_indices, settings):
-        keyword = row.get("Table Name/Word Search Keyword", "").strip()
-        if not keyword:
-            return True  # Nothing to match = PASS
 
-        scraper_path = os.path.join(os.path.dirname(__file__), "scrapers", "text_scraper.py")
-        ScraperClass = load_scraper_class(scraper_path)
-
-        for page_num in page_indices:
-            try:
-                page = doc.load_page(page_num)
-                scraper = ScraperClass(page)
-                scraper.scrape()
-                result = scraper.result
-                text = result.get("text", "")[0].lower()
-                if keyword.lower() in text:
-                    return True  # Match found = PASS
-            except Exception as e:
-                logger.warning(f"keyword_match error on page {page_num+1} for {row.get('agency_yr')}: {e}")
-                return False
-
-        return False  # Keyword not found on any listed page = FAIL
-
-    def test_stratobj_match(row, doc, page_indices, settings):
-        stratobj = row.get("stratobj", "").strip()
-        if not stratobj:
-            return True  # Nothing to match = PASS
-
-        scraper_path = os.path.join(os.path.dirname(__file__), "scrapers", "text_scraper.py")
-        ScraperClass = load_scraper_class(scraper_path)
-
-        for page_num in page_indices:
-            try:
-                page = doc.load_page(page_num)
-                scraper = ScraperClass(page)
-                scraper.scrape()
-                result = scraper.result
-                text = result.get("text", "")[0].lower()
-                if stratobj.lower() in text:
-                    return True  # Match found = PASS
-            except Exception as e:
-                logger.warning(f"stratobj_match error on page {page_num+1} for {row.get('agency_yr')}: {e}")
-                return False
-
-        return False  # stratobj not found on any listed page = FAIL
-
-    def test_obj_match(row, doc, page_indices, settings):
-        obj = row.get("obj", "").strip()
-        if not obj:
-            return True  # Nothing to match = PASS
-
-        scraper_path = os.path.join(os.path.dirname(__file__), "scrapers", "text_scraper.py")
-        ScraperClass = load_scraper_class(scraper_path)
-
-        for page_num in page_indices:
-            try:
-                page = doc.load_page(page_num)
-                scraper = ScraperClass(page)
-                scraper.scrape()
-                result = scraper.result
-                text = result.get("text", "")[0].lower()
-                if obj.lower() in text:
-                    return True  # Match found = PASS
-            except Exception as e:
-                logger.warning(f"obj_match error on page {page_num+1} for {row.get('agency_yr')}: {e}")
-                return False
-
-        return False  # obj not found on any listed page = FAIL
-
-    def test_goal_match(row, doc, page_indices, settings):
-        goal = row.get("goal", "").strip()
-        goal = re.sub(r"\[.*?\]", "", goal).strip()
-        logger.debug(f"testing goal {goal} for {row.get("agency", "")}")
-
-        if not goal:
-            return True  # Nothing to match = PASS
-
-        scraper_path = os.path.join(os.path.dirname(__file__), "scrapers", "text_scraper.py")
-        ScraperClass = load_scraper_class(scraper_path)
-
-        for page_num in page_indices:
-            try:
-                page = doc.load_page(page_num)
-                scraper = ScraperClass(page)
-                scraper.scrape()
-                result = scraper.result
-                text = result.get("text", "")[0].lower()
-                if goal.lower() in text:
-                    return True  # Match found = PASS
-            except Exception as e:
-                logger.warning(f"goal_match error on page {page_num+1} for {row.get('agency_yr')}: {e}")
-                return False
-
-        return False  # goal not found on any listed page = FAIL
-
-    def test_table_detected(row, doc, page_indices, settings):
-        #Expecting tables in these types
-        if row.get("Format_Type") not in [1, 2, 3, 4, 5, 6 ,7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]:
-            return True
-
-        logger.debug(f"Using MTT to detect tables in {row.get("agency_yr","")}")
-        scraper_path = os.path.join(os.path.dirname(__file__), "scrapers", "table_scraper.py")
-        ScraperClass = load_scraper_class(scraper_path)
-
+def _scrape_page_texts(document, page_indices, logger, label):
+    """Scrape each page once and return text plus a success indicator."""
+    ScraperClass = _load_text_scraper()
+    texts = []
+    for page_index in page_indices:
         try:
-            for page_num in page_indices:
-                page = doc.load_page(page_num)
-                scraper = ScraperClass([page])
-                scraper.scrape()
-                result = scraper.result
-                num_tables = len(result.get("tables",[]))
-                if num_tables > 0:
-                    logger.debug(f"{num_tables} table(s) found in {row.get("agency_yr")} page {page_num+1}, creating visualization")
-                    # Save image to file with page number
-                    output_path = os.path.join(output_dir, f"{row.get('agency_yr','unknown')}_page_{page_num+1}.png")
-                    result.get("images")[0].save(output_path)
-                    logger.debug("Diagnostic Image Saved")
-                    # Save structure content to text file
-                    table_payloads = result.get("tables", [])
-                    if table_payloads:
-                        for idx, table in enumerate(table_payloads, start=1):
-                            structure = table.get("structures", [])
-                            if not structure:
-                                continue
-                            txt_lines = []
-                            for elem in structure:
-                                elem_id = elem.get("id", "?")
-                                label = elem.get("label", "")
-                                content = elem.get("ocr_text", "")
-                                txt_lines.append(f"ID: {elem_id} | {label} -> {content}")
-
-                            struct_path = os.path.join(
-                                output_dir,
-                                f"{row.get('agency_yr','unknown')}_page_{page_num+1}_table_{idx}_structure.txt"
-                            )
-                            with open(struct_path, "w", encoding="utf-8") as f:
-                                f.write("\n".join(txt_lines))
-                            logger.debug(f"Structure data saved to {struct_path}")
-                    return True # Pass if any page detects a table
-        except Exception as e:
-            logger.warning(f"table_detected error on {row.get('agency_yr')}: {e}")
-            return False 
-        logger.debug(f"No tables detected in {row.get("agency_yr")} page {page_num}")
-        return False # No tables found
-
-# List all tests here and define them above. This is the list that is looped over.
-    tests = [
-        ("pdf_found", test_pdf_found),
-        ("pages_parsed", test_pages_parsed),
-        ("text_scraped", test_text_scraped),
-        ("keyword_match", test_keyword_match),
-        ("stratobj_match", test_stratobj_match),
-        ("obj_match", test_obj_match),
-        ("goal_match", test_goal_match),
-        ("table_detected", test_table_detected),
-    ]
-
-    # Loop over each row in the MID to run tests
-    for i in range(total_rows):
-        mid_manager.current_index = i
-        row = mid_manager.get_current_row()
-        agency_yr = row.get("agency_yr", f"UNKNOWN_{i}")
-        agency = row.get("agency", "UNKNOWN")
-        year = row.get("year", "UNKNOWN")
-        format_type = row.get("Format_Type", "UNKNOWN")
-        stratobj = row.get("stratobj", "UNKNOWN")
-        obj = row.get("obj", "UNKNOWN")
-        goal = row.get("goal", "UNKNOWN")
-        label = f"{row.get('agency', 'UNKNOWN')} ({row.get('year', 'UNKNOWN')})"
-        logger.debug(f"Auditing line {i} of {total_rows}")
-
-        entry = {
-            "index": i+1, # Convert to 1-indexed for human readers
-            "agency_yr": agency_yr,
-            "agency": agency,
-            "year": int(year) if pd.notna(year) else "UNKNOWN",
-            "format_type": int(format_type) if pd.notna(format_type) else "UNKNOWN",
-            "stratobj": stratobj,
-            "obj": obj,
-            "goal": goal,
-            "label": label,
-            "tests": {},
-            "status": "PASS"
-        }
-
-        try:
-            filename = f"{agency_yr.replace('-', '_')}.pdf"
-            path = os.path.join(settings.get("dataDirectory", ""), filename)
-            if not os.path.isfile(path):
-                raise FileNotFoundError(f"Missing file: {filename}")
-
-            doc = fitz.open(path)
-            page_indices = mid_manager.parse_pdf_pages()
-
-            for test_name, test_func in tests:
-                try:
-                    passed = test_func(row, doc, page_indices, settings)
-                    entry["tests"][test_name] = "PASS" if passed else "FAIL"
-                    if not passed:
-                        entry["status"] = "FAIL"
-                        summary["test_failures"][test_name] = summary["test_failures"].get(test_name, 0) + 1
-                except Exception as e:
-                    entry["tests"][test_name] = f"ERROR: {e}"
-                    entry["status"] = "FAIL"
-                    summary["test_failures"][test_name] = summary["test_failures"].get(test_name, 0) + 1
-                    logger.warning(f"{test_name} ERROR for {agency_yr}: {e}")
-
-        except Exception as e:
-            entry["status"] = "FAIL"
-            entry["tests"]["fatal"] = str(e)
-            logger.warning(f"AUDIT FATAL ERROR for {agency_yr}: {e}")
-            summary["test_failures"]["fatal"] = summary["test_failures"].get("fatal", 0) + 1
-
-        results.append(entry)
-
-        summary["status_counts"][entry["status"]] += 1
-
-        agency = entry["agency"]
-        year = str(entry["year"])
-        fmt = str(entry["format_type"])
-
-        failed_tests = [test for test, result in entry["tests"].items() if result == "FAIL" or result.startswith("ERROR")]
-
-        # Track outcomes by agency-year
-        if entry["status"] == "FAIL":
-            summary["failures_by_agency"].setdefault(agency, {})
-            summary["failures_by_agency"][agency].setdefault(year, [])
-            summary["failures_by_agency"][agency][year].extend(failed_tests)
-
-        # Outcomes by Format Type
-        outcome_bucket = summary["outcomes_by_format_type"].setdefault(str(fmt), {"PASS": 0, "FAIL": 0, "failed_tests": {}})
-        outcome_bucket[entry["status"]] += 1
-        for test in failed_tests:
-            outcome_bucket["failed_tests"][test] = outcome_bucket["failed_tests"].get(test, 0) + 1
+            scraper = ScraperClass(document.load_page(page_index))
+            scraper.scrape()
+            payload = scraper.result.get("text", "")
+            if isinstance(payload, list):
+                text = clean_value(payload[0]) if payload else ""
+            else:
+                text = clean_value(payload)
+            texts.append(text)
+        except Exception as exc:
+            logger.warning(
+                "text scrape failed on page %s for %s: %s",
+                page_index + 1,
+                label,
+                exc,
+            )
+            return texts, False
+    return texts, bool(texts) and all(texts)
 
 
-
-    # Save Audit file to the logs directory
-    log_dir = settings.get("logFileDirectory", "./logs")
-    output_path = os.path.join(log_dir, "audit_report.json")
-    summary_path = os.path.join(log_dir, "audit_summary.json")
+def _test_table_detected(
+    row, document, page_indices, mid_manager, diagnostics_dir, logger
+):
+    format_type = mid_manager.format_type(row)
+    if str(format_type) not in TABLE_FORMAT_TYPES:
+        return True
 
     try:
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(results, f, indent=2)
-        for agency, failures in summary["failures_by_agency"].items():
-            summary["failures_by_agency"][agency] = {
-                year: sorted(set(tests)) for year, tests in failures.items()
-            }
+        ScraperClass = _load_table_scraper()
+    except (ImportError, OSError) as exc:
+        # The table scraper is an optional plugin: it needs machine-learning
+        # libraries that are not part of a packaged build. Its absence makes
+        # this one check unavailable, not the whole audit invalid.
+        logger.warning(f"Table detection skipped; no table scraper available: {exc}")
+        return True
 
-        with open(summary_path, "w", encoding="utf-8") as f:
-            json.dump(summary, f, indent=2)
+    observation_stem = safe_filename_stem(mid_manager.observation_stem(row))
+    try:
+        for page_index in page_indices:
+            scraper = ScraperClass([document.load_page(page_index)])
+            scraper.scrape()
+            result = scraper.result
+            tables = result.get("tables", [])
+            if not tables:
+                continue
 
-        logger.info(f"Audit finished. Detailed report: {output_path}")
-        logger.info(f"Summary saved to: {summary_path}")
-        return output_path
+            images = result.get("images", [])
+            if images:
+                image_path = diagnostics_dir / (
+                    f"{observation_stem}_page_{page_index + 1}.png"
+                )
+                images[0].save(image_path)
 
-    except Exception as e:
-        logger.critical(f"Failed to save audit output: {e}")
-        raise RuntimeError(f"Failed to save audit output: {e}")
+            for table_number, table in enumerate(tables, start=1):
+                structure = table.get("structures", [])
+                if not structure:
+                    continue
+                lines = [
+                    "ID: {id} | {label} -> {text}".format(
+                        id=element.get("id", "?"),
+                        label=element.get("label", ""),
+                        text=element.get("ocr_text", ""),
+                    )
+                    for element in structure
+                ]
+                structure_path = diagnostics_dir / (
+                    f"{observation_stem}_page_{page_index + 1}_"
+                    f"table_{table_number}_structure.txt"
+                )
+                structure_path.write_text("\n".join(lines), encoding="utf-8")
+            return True
+    except Exception as exc:
+        logger.warning(
+            "table detection failed for %s: %s",
+            mid_manager.observation_label(row),
+            exc,
+        )
+    return False
+
+
+def _find_document(row, mid_manager, data_directory):
+    for filename in mid_manager.document_candidates(row):
+        path = data_directory / filename
+        if path.is_file():
+            return path
+    return None
+
+
+def run_mid_audit(mid_manager, settings):
+    """Audit every visible MID row using the configured schema.
+
+    The report records the configured X/Y values and all configured interaction
+    fields. This keeps the audit stable when a project changes its column names.
+    """
+    logger = setup_logger()
+    logger.info("Starting structured MID audit")
+
+    log_directory = Path(settings.get("logFileDirectory") or "logs")
+    log_directory.mkdir(parents=True, exist_ok=True)
+    diagnostics_dir = log_directory / "table_detections"
+    diagnostics_dir.mkdir(parents=True, exist_ok=True)
+    data_directory = Path(settings.get("dataDirectory") or ".")
+
+    # One document may host several observations, so identity is
+    # (document, X, Y). Rows sharing one are reported rather than rejected.
+    duplicate_positions = mid_manager.duplicate_observation_view_indices()
+
+    results = []
+    status_counts = Counter()
+    test_failures = Counter()
+    failures_by_observation = {}
+    format_outcomes = defaultdict(
+        lambda: {"PASS": 0, "FAIL": 0, "failed_tests": {}}
+    )
+
+    for index in range(len(mid_manager.df)):
+        mid_manager.current_index = index
+        row = mid_manager.get_current_row()
+        x_value, y_value = mid_manager.observation_key(row)
+        label = mid_manager.observation_label(row)
+        format_type = mid_manager.format_type(row) or "UNKNOWN"
+
+        entry = {
+            "index": index + 1,
+            "x_column": mid_manager.schema.x_column,
+            "x_value": x_value,
+            "y_column": mid_manager.schema.y_column,
+            "y_value": y_value,
+            "observation_key": [x_value, y_value],
+            "label": label,
+            "format_type": format_type,
+            "fields": {
+                column: clean_value(row.get(column, ""))
+                for column in mid_manager.schema.interaction_columns
+            },
+            "tests": {},
+            "status": "PASS",
+        }
+
+        failed_tests = []
+
+        def record(test_name: str, passed: bool):
+            status = "PASS" if passed else "FAIL"
+            entry["tests"][test_name] = status
+            if not passed:
+                failed_tests.append(test_name)
+
+        record("duplicate_observation", index not in duplicate_positions)
+
+        document_path = _find_document(row, mid_manager, data_directory)
+        record("pdf_found", document_path is not None)
+
+        document = None
+        page_indices = []
+        page_texts = []
+        if document_path is not None:
+            try:
+                document = fitz.open(document_path)
+                page_indices = mid_manager.parse_pdf_pages()
+                page_indices = [
+                    page for page in page_indices if 0 <= page < document.page_count
+                ]
+            except Exception as exc:
+                logger.warning("Unable to open %s: %s", document_path, exc)
+
+        record("pages_parsed", bool(page_indices))
+        if document is not None and page_indices:
+            page_texts, text_scraped = _scrape_page_texts(
+                document, page_indices, logger, label
+            )
+        else:
+            text_scraped = False
+        record("text_scraped", text_scraped)
+
+        searchable_text = "\n".join(page_texts).casefold()
+        keyword_column = mid_manager.schema.keyword_column
+        if keyword_column:
+            keyword = clean_value(row.get(keyword_column, ""))
+            record(
+                "keyword_match",
+                not keyword or keyword.casefold() in searchable_text,
+            )
+
+        for column in mid_manager.schema.interaction_columns:
+            value = clean_value(row.get(column, ""))
+            record(
+                f"field:{column}",
+                not value or value.casefold() in searchable_text,
+            )
+
+        table_detected = bool(document and page_indices) and _test_table_detected(
+            row,
+            document,
+            page_indices,
+            mid_manager,
+            diagnostics_dir,
+            logger,
+        )
+        record("table_detected", table_detected)
+
+        if document is not None:
+            document.close()
+
+        if failed_tests:
+            entry["status"] = "FAIL"
+            failures_by_observation[label] = failed_tests
+            test_failures.update(failed_tests)
+
+        results.append(entry)
+        status_counts[entry["status"]] += 1
+        format_entry = format_outcomes[format_type]
+        format_entry[entry["status"]] += 1
+        for test_name in failed_tests:
+            current = format_entry["failed_tests"].get(test_name, 0)
+            format_entry["failed_tests"][test_name] = current + 1
+
+    summary = {
+        "total_entries": len(results),
+        "status_counts": {
+            "PASS": status_counts.get("PASS", 0),
+            "FAIL": status_counts.get("FAIL", 0),
+        },
+        "test_failures": dict(test_failures),
+        "failures_by_observation": failures_by_observation,
+        "outcomes_by_format_type": dict(format_outcomes),
+    }
+
+    report = {
+        "schema": mid_manager.schema.to_mapping(),
+        "results": results,
+        "summary": summary,
+    }
+    report_path = log_directory / "audit_report.json"
+    summary_path = log_directory / "audit_summary.json"
+    report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    logger.info("MID audit complete: %s", report_path)
+    return str(report_path)

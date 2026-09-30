@@ -5,7 +5,7 @@ name: Build
 # workflow exists to get a macOS build without owning a Mac.
 #
 # Every run uploads installable archives as workflow artifacts. Pushing a tag
-# like v0.2.0 additionally attaches them to a GitHub release.
+# like v0.2.1 additionally attaches them to a GitHub release.
 
 on:
   push:
@@ -13,10 +13,6 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
-
-defaults:
-  run:
-    working-directory: minimal_ui_refactor
 
 jobs:
   test:
@@ -38,7 +34,6 @@ jobs:
       # platform plugin lets the widget tests run headless; conftest.py already
       # selects it on non-Windows.
       - name: Install Qt runtime libraries
-        working-directory: .
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -127,7 +122,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: DocumentReviewTool-${{ matrix.label }}
-          path: minimal_ui_refactor/dist/DocumentReviewTool-${{ matrix.label }}.zip
+          path: dist/DocumentReviewTool-${{ matrix.label }}.zip
           if-no-files-found: error
 
   release:

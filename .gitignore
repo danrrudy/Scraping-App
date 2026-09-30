@@ -1,5 +1,4 @@
-# Working data — patterns without a leading path apply at any depth, so
-# nested copies (e.g. minimal_ui_refactor/data) are covered too.
+# Working data — patterns without a leading path apply at any depth.
 data/
 logs/
 *.pdf
@@ -23,6 +22,10 @@ dist/
 *.spec.bak
 
 # Plugin folders seeded into a source checkout at first run; the shipped
-# copies live in minimal_ui_refactor/bundled/
-minimal_ui_refactor/scrapers/
-minimal_ui_refactor/extractors/
+# copies live in bundled/. Anchored to the root so bundled/scrapers and
+# bundled/extractors stay tracked.
+/scrapers/
+/extractors/
+
+# Stray archives
+*.zip
